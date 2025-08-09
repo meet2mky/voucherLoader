@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>voucherLoader</title>
+  <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+  <div class="container" id="app-container">
+    <div id="main-view" class="view">
+      <div class="header">
+        <img src="icons/icon.png" alt="VL Logo" class="logo" id="logo">
+        <h1>voucherLoader</h1>
+      </div>
+      <div class="selection-container">
+        <label>Select a Brand:</label>
+        <div id="category-selector-container">
+          <div class="category-item" data-category="myntra">
+            <img src="images/myntra-logo.png" alt="Myntra">
+          </div>
+          <!-- To add more brands, add a logo and an action container below -->
+          <div class="category-item" data-category="amazon">
+            <img src="images/amazon-logo.png" alt="Amazon">
+          </div>
+        </div>
+      </div>
+      <div class="action-container" data-category="myntra" style="display: none;">
+        <h3>Insert and Load Myntra Vouchers</h3>
+        <button class="action-btn show-vouchers-btn">Show Existing Vouchers</button>
+        <button class="action-btn clear-vouchers-btn">Clear Vouchers</button>
+        <button class="action-btn file-btn">Insert Vouchers from File</button>
+      </div>
+      <div class="action-container" data-category="amazon" style="display: none;">
+        <h3>Insert and Load Amazon Vouchers</h3>
+        <button class="action-btn show-vouchers-btn">Show Existing Vouchers</button>
+        <button class="action-btn clear-vouchers-btn">Clear Vouchers</button>
+        <button class="action-btn file-btn">Insert Vouchers from File</button>
+      </div>
+    </div>
+    <div id="voucher-view" class="view" style="display: none;">
+      <!-- Voucher table will be dynamically inserted here -->
+    </div>
+  </div>
+  <script src="scripts/popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "voucherLoader",
+  "version": "1.2",
+  "description": "A powerful extension to manage, view and load your brand vouchers in bulk.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon.png",
+      "48": "icons/icon.png",
+      "128": "icons/icon.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
+  }
+}
