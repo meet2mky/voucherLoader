@@ -77,6 +77,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   };
 
+  /**
+   * Reloads a given tab and waits for it to be completely loaded.
+   * @param {number} tabId The ID of the tab to reload.
+   * @returns {Promise<void>} A promise that resolves when the tab has finished loading.
+   */
+  async function reloadTabAndWait(tabId) {
+    return new Promise((resolve, reject) => {
+      const listener = (updatedTabId, changeInfo) => {
+        // Ensure the update is for the correct tab and it has finished loading
+        if (updatedTabId === tabId && changeInfo.status === 'complete') {
+          // A small delay to ensure scripts on the reloaded page have initialized
+          setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve();
+          }, 500); // 0.5s delay for safety
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(listener);
+      chrome.tabs.reload(tabId);
+    });
+  }
+
 // Function to get the current active tab
   async function getCurrentTab() {
     try {
@@ -99,8 +122,24 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!tab) { // The alert is already handled inside getCurrentTab, so we just exit.
         return;
       }
-      if (!tab.url.startsWith(BRAND_URL_MAP[brand])) {
+      const expectedUrl = BRAND_URL_MAP[brand];
+      if (!tab.url.startsWith(expectedUrl)) {
         alert(`Please navigate to the correct ${brand} voucher page and try again.`);
+        return;
+      }
+
+      // Disable button immediately to give user feedback
+      button.disabled = true;
+      button.textContent = 'Reloading page...';
+
+      try {
+        // --- 1. RELOAD TAB BEFORE EXECUTING SCRIPT ---
+        await reloadTabAndWait(tab.id);
+      } catch (error) {
+        console.error('Failed to reload tab:', error);
+        alert('The page failed to reload correctly. Please try again.');
+        button.disabled = false;
+        button.textContent = 'Load Vouchers';
         return;
       }
 
@@ -112,7 +151,8 @@ document.addEventListener('DOMContentLoaded', function() {
           alert(`No vouchers found for ${brand}. Please insert vouchers from a file first.`);
           return;
         }
-
+        
+        alert(`Loading ${vouchers.length} vouchers for ${brand}...`)
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
           alert(`No loading logic defined for ${brand}.`);
@@ -123,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let failedLoads = 0;
 
         // Disable the button to prevent multiple clicks during operation
-        button.disabled = true;
+        // The button is already disabled, just update the text
         button.textContent = 'Loading...';
 
         for (const voucher of vouchers) {
@@ -139,16 +179,18 @@ document.addEventListener('DOMContentLoaded', function() {
               successfulLoads++;
             } else {
               failedLoads++;
+              alert(`Voucher loading failed for voucher ${voucher.VoucherCode}. Click Ok to continue...`)
             }
 
             // Wait for a moment to let the page process the submission (e.g., via AJAX)
-            await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second delay
+            await new Promise(resolve => setTimeout(resolve, 4000)); // 2-second delay
           } catch (error) {
             failedLoads++;
             console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
             alert(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.\n\nError: ${error.message}`);
             break; // Stop the loop if a critical error occurs
           }
+          await reloadTabAndWait(tab.id);
         }
         // Re-enable the button and provide a summary
         button.disabled = false;
@@ -228,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function handleFileUpload(category) {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.csv, text/csv'; // Accept only CSV files
+    input.accept = '.csv, text/csv, .txt, text/plain';
 
     input.onchange = e => {
       const file = e.target.files[0];
@@ -236,17 +278,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const reader = new FileReader();
       reader.onload = event => {
-        const csvText = event.target.result;
+        const fileContent = event.target.result;
         try {
-          const newVouchers = parseCSV(csvText);
+          let newVouchers;
+          if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+            newVouchers = parseCSV(fileContent);
+          } else {
+            newVouchers = parseTxt(fileContent);
+          }
+
           if (newVouchers.length > 0) {
             addVouchersToStorage(category, newVouchers);
           } else {
-            alert('No valid vouchers found in the file. Please ensure the file is not empty and has the correct format (VoucherCode,VoucherPin,VoucherValue).');
+            alert('No valid vouchers found in the file. Please ensure the file is not empty and has the correct format.');
           }
         } catch (error) {
-          console.error('Error parsing CSV:', error);
-          alert(`Failed to parse the CSV file. Please ensure it is correctly formatted.\nError: ${error.message}`);
+          console.error('Error parsing file:', error);
+          alert(`Failed to parse the file. Please ensure it is correctly formatted.\nError: ${error.message}`);
         }
       };
       reader.onerror = () => {
@@ -257,6 +305,31 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     input.click(); // Programmatically open the file dialog
+  }
+
+  /**
+   * Parses a text string into an array of voucher objects.
+   * @param {string} textContent The raw text content of the file.
+   * @returns {Array<Object>} An array of voucher objects.
+   */
+  function parseTxt(textContent) {
+    const vouchers = [];
+    const blocks = textContent.split('*iShop Order Confirmation*');
+
+    for (const block of blocks) {
+      const codeMatch = block.match(/Code: (\d+)/);
+      const pinMatch = block.match(/PIN: (\d+)/);
+      const valueMatch = block.match(/Value:.*?([\d.]+)/);
+
+      if (codeMatch && pinMatch && valueMatch) {
+        vouchers.push({
+          VoucherCode: codeMatch[1].trim(),
+          VoucherPin: pinMatch[1].trim(),
+          VoucherValue: valueMatch[1].trim()
+        });
+      }
+    }
+    return vouchers;
   }
 
   /**
