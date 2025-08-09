@@ -15,6 +15,68 @@ document.addEventListener('DOMContentLoaded', function() {
     amazon: 'https://www.amazon.in/gp/aw/ya/gcb'
   };
 
+  /**
+   * A map of injectable functions that contain the logic for adding a voucher on each brand's website.
+   * These functions are executed in the context of the web page, not the extension's popup.
+   */
+  const BRAND_LOAD_LOGIC = {
+    myntra: async function(voucherCode, voucherPin) {
+      // Helper function to create a delay, allowing the page to react.
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+      // Step 1: Click the button to reveal the gift card input form..
+      const openFormButton = document.querySelector('.balance-giftCardButton');
+      if (!openFormButton) {
+        alert('Could not find the initial "Add Gift Card" button. The website layout may have changed.');
+        return false; // Indicate failure
+      }
+      openFormButton.click();
+
+      // Step 2: Wait for the form to become visible.
+      await sleep(3000); // 3 second delay
+
+      // Step 3: Now find the actual input fields and fill them.
+      const codeInput = document.querySelector('input[name="gcnumber"]');
+      const pinInput = document.querySelector('input[name="gcpin"]');
+
+      if (!codeInput || !pinInput) {
+        alert('Could not find the voucher input fields after clicking. The website structure may have changed.');
+        return false; // Indicate failure
+      }
+
+      // Step 4: Fill the gcnumber and gcpin.
+      codeInput.value = voucherCode;
+      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+      pinInput.value = voucherPin;
+      pinInput.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      await sleep(3000)
+      const finalAddButton = document.querySelector('.addCard-showButton')
+      if (!finalAddButton) {
+        alert('Could not find the final add button.')
+        return false
+      }
+      finalAddButton.click()
+      await sleep(3000)
+      return true; // Indicate success
+    },
+    amazon: function(voucherCode) {
+      // NOTE: These selectors are placeholders for Amazon's gift card page.
+      const codeInput = document.querySelector('input#gc-redemption-input'); // Example selector
+      const addButton = document.querySelector('input[name*="add-to-balance"]'); // Example selector
+
+      if (!codeInput || !addButton) {
+        alert('Could not find the gift card input field or button on the page. The website structure may have changed.');
+        return false; // Indicate failure
+      }
+
+      codeInput.value = voucherCode;
+      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+      addButton.click();
+      return true; // Indicate success
+    }
+  };
+
 // Function to get the current active tab
   async function getCurrentTab() {
     try {
@@ -38,22 +100,61 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       if (!tab.url.startsWith(BRAND_URL_MAP[brand])) {
-        alert(`Please navigate to the ${brand} website voucher page and try again.`);
-        return
+        alert(`Please navigate to the correct ${brand} voucher page and try again.`);
+        return;
       }
 
-      const scriptToInject = `scripts/${brand}-load.js`;
+      const storageKey = `${brand}_vouchers`;
+      chrome.storage.local.get([storageKey], async (result) => {
+        const vouchers = result[storageKey];
 
-      try {
-        // Injects and executes the script in the active tab
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: [scriptToInject],
-        });
-      } catch (error) {
-        console.error(`Error injecting script for ${brand}:`, error);
-        alert(`Failed to execute the script on the current page. This can happen on special browser pages or the web store.\n\nError: ${error.message}`);
-      }
+        if (!vouchers || vouchers.length === 0) {
+          alert(`No vouchers found for ${brand}. Please insert vouchers from a file first.`);
+          return;
+        }
+
+        const loadLogic = BRAND_LOAD_LOGIC[brand];
+        if (!loadLogic) {
+          alert(`No loading logic defined for ${brand}.`);
+          return;
+        }
+
+        let successfulLoads = 0;
+        let failedLoads = 0;
+
+        // Disable the button to prevent multiple clicks during operation
+        button.disabled = true;
+        button.textContent = 'Loading...';
+
+        for (const voucher of vouchers) {
+          try {
+            const [injectionResult] = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: loadLogic,
+              args: [voucher.VoucherCode, voucher.VoucherPin], // Pass voucher data as arguments
+            });
+
+            // Check the return value from our injected function
+            if (injectionResult && injectionResult.result) {
+              successfulLoads++;
+            } else {
+              failedLoads++;
+            }
+
+            // Wait for a moment to let the page process the submission (e.g., via AJAX)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second delay
+          } catch (error) {
+            failedLoads++;
+            console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
+            alert(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.\n\nError: ${error.message}`);
+            break; // Stop the loop if a critical error occurs
+          }
+        }
+        // Re-enable the button and provide a summary
+        button.disabled = false;
+        button.textContent = 'Load Vouchers';
+        alert(`Voucher loading complete.\n\nSuccessfully loaded: ${successfulLoads}\nFailed: ${failedLoads}`);
+      });
     });
   });
 
