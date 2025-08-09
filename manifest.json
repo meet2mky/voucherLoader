@@ -5,7 +5,8 @@
   "description": "A powerful extension to manage, view and load your brand vouchers in bulk.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "action": {
     "default_popup": "popup.html",

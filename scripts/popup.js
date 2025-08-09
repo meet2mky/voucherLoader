@@ -9,6 +9,54 @@ document.addEventListener('DOMContentLoaded', function() {
   // State
   let activeCategory = null;
 
+  // A centralized map for brand-specific voucher page information
+  const BRAND_URL_MAP = {
+    myntra: 'https://www.myntra.com/my/myntracredit',
+    amazon: 'https://www.amazon.in/gp/aw/ya/gcb'
+  };
+
+// Function to get the current active tab
+  async function getCurrentTab() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return tab;
+    } catch (error) {
+      console.error('Error getting current tab:', error);
+      alert('An error occurred while trying to access the current browser tab. Check the extension console for details.');
+      return null;
+    }
+  }
+
+  // Add event listeners for the new "Load Vouchers" buttons
+  document.querySelectorAll('.load-vouchers-btn').forEach(button => {
+    button.addEventListener('click', async () => {
+      const actionContainer = button.closest('.action-container');
+      const brand = actionContainer.dataset.category;
+      const tab = await getCurrentTab();
+
+      if (!tab) { // The alert is already handled inside getCurrentTab, so we just exit.
+        return;
+      }
+      if (!tab.url.startsWith(BRAND_URL_MAP[brand])) {
+        alert(`Please navigate to the ${brand} website voucher page and try again.`);
+        return
+      }
+
+      const scriptToInject = `scripts/${brand}-load.js`;
+
+      try {
+        // Injects and executes the script in the active tab
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: [scriptToInject],
+        });
+      } catch (error) {
+        console.error(`Error injecting script for ${brand}:`, error);
+        alert(`Failed to execute the script on the current page. This can happen on special browser pages or the web store.\n\nError: ${error.message}`);
+      }
+    });
+  });
+
   // Function to handle category selection
   function handleCategorySelection(event) {
     const selectedCategoryItem = event.currentTarget;
