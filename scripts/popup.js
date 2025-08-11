@@ -256,9 +256,9 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
 
-    if (target.matches('.file-btn')) {
-      console.log(`File load for ${activeCategory} triggered.`);
-      handleFileUpload(activeCategory);
+    if (target.matches('.gmail-btn')) {
+      console.log(`Gmail load for ${activeCategory} triggered.`);
+      handleGmailImport(activeCategory);
     }
 
     if (target.matches('.back-btn')) {
@@ -267,103 +267,14 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   /**
-   * Handles the entire file upload and processing flow.
+   * Handles fetching vouchers from Gmail.
    * @param {string} category The currently active category.
    */
-  function handleFileUpload(category) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv, text/csv, .txt, text/plain';
-
-    input.onchange = e => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = event => {
-        const fileContent = event.target.result;
-        try {
-          let newVouchers;
-          if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-            newVouchers = parseCSV(fileContent);
-          } else {
-            newVouchers = parseTxt(fileContent);
-          }
-
-          if (newVouchers.length > 0) {
-            addVouchersToStorage(category, newVouchers);
-          } else {
-            alert('No valid vouchers found in the file. Please ensure the file is not empty and has the correct format.');
-          }
-        } catch (error) {
-          console.error('Error parsing file:', error);
-          alert(`Failed to parse the file. Please ensure it is correctly formatted.\nError: ${error.message}`);
-        }
-      };
-      reader.onerror = () => {
-        console.error('Error reading file:', reader.error);
-        alert('An error occurred while reading the file.');
-      };
-      reader.readAsText(file);
-    };
-
-    input.click(); // Programmatically open the file dialog
+  function handleGmailImport(category) {
+    alert('TODO: Implement Gmail voucher fetching for ' + category);
   }
 
-  /**
-   * Parses a text string into an array of voucher objects.
-   * @param {string} textContent The raw text content of the file.
-   * @returns {Array<Object>} An array of voucher objects.
-   */
-  function parseTxt(textContent) {
-    const vouchers = [];
-    const blocks = textContent.split('*iShop Order Confirmation*');
-
-    for (const block of blocks) {
-      const codeMatch = block.match(/Code: (\d+)/);
-      const pinMatch = block.match(/PIN: (\d+)/);
-      const valueMatch = block.match(/Value:.*?([\d.]+)/);
-
-      if (codeMatch && pinMatch && valueMatch) {
-        vouchers.push({
-          VoucherCode: codeMatch[1].trim(),
-          VoucherPin: pinMatch[1].trim(),
-          VoucherValue: valueMatch[1].trim()
-        });
-      }
-    }
-    return vouchers;
-  }
-
-  /**
-   * Parses a CSV string into an array of voucher objects.
-   * Assumes the format: VoucherCode,VoucherPin,VoucherValue
-   * Skips the first line as a header.
-   * @param {string} csvText The raw text content of the CSV file.
-   * @returns {Array<Object>} An array of voucher objects.
-   */
-  function parseCSV(csvText) {
-    const vouchers = [];
-    const lines = csvText.trim().split(/\r?\n/);
-
-    // Start from the second line (index 1) to skip the header
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line) {
-        const columns = line.split(',');
-        if (columns.length === 3) {
-          vouchers.push({
-            VoucherCode: columns[0].trim(),
-            VoucherPin: columns[1].trim(),
-            VoucherValue: columns[2].trim()
-          });
-        } else {
-          console.warn(`Skipping malformed row (expected 3 columns): "${line}"`);
-        }
-      }
-    }
-    return vouchers;
-  }
+  
 
   /**
    * Appends new vouchers to the existing list in chrome.storage.
