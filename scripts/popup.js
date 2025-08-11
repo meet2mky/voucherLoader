@@ -100,31 +100,31 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-// Function to get the current active tab
-  async function getCurrentTab() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      return tab;
-    } catch (error) {
-      console.error('Error getting current tab:', error);
-      alert('An error occurred while trying to access the current browser tab. Check the extension console for details.');
-      return null;
-    }
-  }
+  // Get tabId from URL parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabId = parseInt(urlParams.get('tabId'), 10);
 
   // Add event listeners for the new "Load Vouchers" buttons
   document.querySelectorAll('.load-vouchers-btn').forEach(button => {
     button.addEventListener('click', async () => {
       const actionContainer = button.closest('.action-container');
       const brand = actionContainer.dataset.category;
-      const tab = await getCurrentTab();
 
-      if (!tab) { // The alert is already handled inside getCurrentTab, so we just exit.
+      if (!tabId) {
+        alert('Target tab ID not found. Please ensure the extension was opened from a valid tab.');
         return;
       }
+
+      const tab = await chrome.tabs.get(tabId);
+
+      if (!tab) {
+        alert('Could not get tab details. The tab may have been closed.');
+        return;
+      }
+
       const expectedUrl = BRAND_URL_MAP[brand];
-      if (!tab.url.startsWith(expectedUrl)) {
-        alert(`Please navigate to the correct ${brand} voucher page and try again.`);
+      if (!tab.url || !tab.url.startsWith(expectedUrl)) {
+        alert(`Please open the extension from the correct ${brand} voucher page and try again.`);
         return;
       }
 
@@ -149,13 +149,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!vouchers || vouchers.length === 0) {
           alert(`No vouchers found for ${brand}. Please insert vouchers from a file first.`);
+          button.disabled = false;
+          button.textContent = 'Load Vouchers';
           return;
         }
         
-        alert(`Loading ${vouchers.length} vouchers for ${brand}...`)
+        alert(`Loading ${vouchers.length} vouchers for ${brand}...`);
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
           alert(`No loading logic defined for ${brand}.`);
+          button.disabled = false;
+          button.textContent = 'Load Vouchers';
           return;
         }
 
@@ -163,7 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
         let failedLoads = 0;
 
         // Disable the button to prevent multiple clicks during operation
-        // The button is already disabled, just update the text
         button.textContent = 'Loading...';
 
         for (const voucher of vouchers) {
@@ -179,11 +182,11 @@ document.addEventListener('DOMContentLoaded', function() {
               successfulLoads++;
             } else {
               failedLoads++;
-              alert(`Voucher loading failed for voucher ${voucher.VoucherCode}. Click Ok to continue...`)
+              alert(`Voucher loading failed for voucher ${voucher.VoucherCode}. Click Ok to continue...`);
             }
 
             // Wait for a moment to let the page process the submission (e.g., via AJAX)
-            await new Promise(resolve => setTimeout(resolve, 4000)); // 2-second delay
+            await new Promise(resolve => setTimeout(resolve, 4000)); // 4-second delay
           } catch (error) {
             failedLoads++;
             console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
