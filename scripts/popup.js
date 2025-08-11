@@ -270,7 +270,23 @@ document.addEventListener('DOMContentLoaded', function() {
    * Handles fetching vouchers from Gmail.
    * @param {string} category The currently active category.
    */
-  function handleGmailImport(category) {
+  async function handleGmailImport(category) {
+    if (!tabId) {
+      alert('Target tab ID not found. Please ensure the extension was opened from a valid tab.');
+      return;
+    }
+
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab) {
+      alert('Could not get tab details. The tab may have been closed.');
+      return;
+    }
+
+    if (!tab.url || !tab.url.startsWith('https://mail.google.com/')) {
+      alert('This feature only works on a Gmail tab. Please navigate to Gmail tab and try again.');
+      return;
+    }
+
     alert('TODO: Implement Gmail voucher fetching for ' + category);
   }
 
