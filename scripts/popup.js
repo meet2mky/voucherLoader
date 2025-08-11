@@ -283,11 +283,37 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (!tab.url || !tab.url.startsWith('https://mail.google.com/')) {
-      alert('This feature only works on a Gmail tab. Please navigate to Gmail tab and try again.');
+      alert('This feature only works on a Gmail tab. Please navigate to Gmail and try again.');
       return;
     }
 
-    alert('TODO: Implement Gmail voucher fetching for ' + category);
+    try {
+      const [injectionResult] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: isEmailOpenByURL,
+      });
+
+      if (injectionResult.result) {
+        alert('An email is open! Ready to scrape for ' + category + ' vouchers.');
+        // TODO: Add your scraping logic here
+      } else {
+        alert('No email is currently open for reading. Please open an email and try again.');
+      }
+    } catch (error) {
+      console.error('Failed to inject script:', error);
+      alert('Could not check the Gmail tab. Please reload the tab and try again.');
+    }
+  }
+
+  /**
+   * Injected function to check if an email is open by looking at the URL.
+   * @returns {boolean} True if an email is open, false otherwise.
+   */
+  function isEmailOpenByURL() {
+    // The hash for an open email is typically longer than just '#inbox', '#sent', etc.
+    // and contains a slash.
+    const hash = window.location.hash;
+    return hash.includes('/') && hash.split('/')[1].length > 20;
   }
 
   
