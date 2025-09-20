@@ -78,6 +78,46 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   /**
+   * A map of injectable functions that contain the logic for scraping vouchers from Gmail for each brand.
+   * These functions are executed in the context of the Gmail page.
+   */
+  const BRAND_SCRAPE_LOGIC = {
+    myntra: function() {
+      // Gmail's email body is often in a div with class 'a3s' or 'ii gt'.
+      const emailBody = document.querySelector('.a3s, .ii.gt');
+      if (!emailBody) {
+        return { vouchers: null, error: 'Could not find the email body content. The Gmail page structure might have changed.' };
+      }
+
+      const text = emailBody.innerText;
+      const vouchers = [];
+
+      // This regex is designed to find all voucher blocks from iShop emails.
+      const voucherRegex = /Voucher Code:\s*(\S+)\s*Pin:\s*(\S+)\s*Denomination:\s*([\d,.]+)\s*Date of Expiry:\s*(.*?)(?=\s*Click here|\s*Voucher Code:|$)/gs;
+
+      let match;
+      while ((match = voucherRegex.exec(text)) !== null) {
+        vouchers.push({
+          VoucherCode: match[1].trim(),
+          VoucherPin: match[2].trim(),
+          VoucherValue: match[3].trim().replace(/,/g, ''),
+          ExpiryDate: match[4].trim()
+        });
+      }
+
+      if (vouchers.length === 0) {
+        return { vouchers: null, error: 'No vouchers found matching the expected iShop format (e.g., "Voucher Code: ... Pin: ...").' };
+      }
+
+      return { vouchers, error: null };
+    },
+    amazon: function() {
+      // Placeholder for future Amazon-specific scraping logic
+      return { vouchers: null, error: 'Scraping logic for Amazon is not yet implemented.' };
+    }
+  };
+
+  /**
    * Reloads a given tab and waits for it to be completely loaded.
    * @param {number} tabId The ID of the tab to reload.
    * @returns {Promise<void>} A promise that resolves when the tab has finished loading.
@@ -293,9 +333,34 @@ document.addEventListener('DOMContentLoaded', function() {
         func: isEmailOpenByURL,
       });
 
-      if (injectionResult.result) {
-        alert('An email is open! Ready to scrape for ' + category + ' vouchers.');
-        // TODO: Add your scraping logic here
+      if (injectionResult && injectionResult.result) {
+        // Email is open, now scrape it using brand-specific logic.
+        const scrapeLogic = BRAND_SCRAPE_LOGIC[category];
+        if (!scrapeLogic) {
+          alert(`No Gmail scraping logic defined for ${category}.`);
+          return;
+        }
+
+        const [scrapeInjectionResult] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: scrapeLogic,
+        });
+
+        if (!scrapeInjectionResult || !scrapeInjectionResult.result) {
+          alert('Scraping failed: Did not get a result from the page.');
+          return;
+        }
+
+        const { vouchers, error } = scrapeInjectionResult.result;
+
+        if (error) {
+          alert(`Scraping failed: ${error}`);
+        } else if (vouchers && vouchers.length > 0) {
+          console.log('Scraped vouchers:', vouchers);
+          addVouchersToStorage(category, vouchers);
+        } else {
+          alert('No vouchers were found in the email.');
+        }
       } else {
         alert('No email is currently open for reading. Please open an email and try again.');
       }
@@ -319,7 +384,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
 
   /**
-   * Appends new vouchers to the existing list in chrome.storage.
+   * Appends new, unique vouchers to the existing list in chrome.storage.
    * @param {string} category The category to which the vouchers belong.
    * @param {Array<Object>} newVouchers The new vouchers to add.
    */
@@ -327,15 +392,36 @@ document.addEventListener('DOMContentLoaded', function() {
     const storageKey = `${category}_vouchers`;
     chrome.storage.local.get([storageKey], result => {
       const existingVouchers = result[storageKey] || [];
-      const combinedVouchers = existingVouchers.concat(newVouchers);
+
+      // Create a Set of existing voucher codes for efficient O(1) lookups.
+      const existingVoucherCodes = new Set(existingVouchers.map(v => v.VoucherCode));
+
+      // Filter out any new vouchers that already exist in storage.
+      const uniqueNewVouchers = newVouchers.filter(v => !existingVoucherCodes.has(v.VoucherCode));
+      const duplicatesFound = newVouchers.length - uniqueNewVouchers.length;
+
+      if (uniqueNewVouchers.length === 0) {
+        let message = `No new vouchers to add for ${category}.`;
+        if (duplicatesFound > 0) {
+          message += ` ${duplicatesFound} duplicate(s) were found and ignored.`;
+        }
+        alert(message);
+        return;
+      }
+
+      const combinedVouchers = existingVouchers.concat(uniqueNewVouchers);
 
       chrome.storage.local.set({ [storageKey]: combinedVouchers }, () => {
         if (chrome.runtime.lastError) {
           console.error('Error saving vouchers:', chrome.runtime.lastError);
           alert('An error occurred while saving the vouchers.');
         } else {
-          console.log(`${newVouchers.length} vouchers added for ${category}.`);
-          alert(`${newVouchers.length} voucher(s) successfully loaded for ${category}!`);
+          let message = `${uniqueNewVouchers.length} new voucher(s) successfully added for ${category}!`;
+          if (duplicatesFound > 0) {
+            message += `\n${duplicatesFound} duplicate(s) were ignored.`;
+          }
+          console.log(`${uniqueNewVouchers.length} vouchers added for ${category}.`);
+          alert(message);
         }
       });
     });
@@ -390,10 +476,11 @@ document.addEventListener('DOMContentLoaded', function() {
         <th>Code</th>
         <th>Pin</th>
         <th>Value</th>
+        <th>Expiry</th>
       </tr></thead><tbody>`;
 
     vouchers.forEach(voucher => {
-      tableHTML += `<tr><td>${voucher.VoucherCode || 'N/A'}</td><td>${voucher.VoucherPin || 'N/A'}</td><td>${voucher.VoucherValue || 'N/A'}</td></tr>`;
+      tableHTML += `<tr><td>${voucher.VoucherCode || 'N/A'}</td><td>${voucher.VoucherPin || 'N/A'}</td><td>${voucher.VoucherValue || 'N/A'}</td><td>${voucher.ExpiryDate || 'N/A'}</td></tr>`;
     });
 
     tableHTML += `</tbody></table>`;
