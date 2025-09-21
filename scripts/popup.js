@@ -208,21 +208,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      // Disable button immediately to give user feedback
-      button.disabled = true;
-      button.textContent = 'Reloading page...';
-
-      try {
-        // --- 1. RELOAD TAB BEFORE EXECUTING SCRIPT ---
-        await reloadTabAndWait(tab.id);
-      } catch (error) {
-        console.error('Failed to reload tab:', error);
-        displayMessage('The page failed to reload correctly. Please try again.', 'error');
-        button.disabled = false;
-        button.textContent = 'Load Vouchers';
-        return;
-      }
-
       const storageKey = `${brand}_vouchers`;
       chrome.storage.local.get([storageKey], async (result) => {
         const allVouchers = result[storageKey] || [];
@@ -234,7 +219,20 @@ document.addEventListener('DOMContentLoaded', function() {
           button.textContent = 'Load Vouchers';
           return;
         }
-        
+              // Disable button immediately to give user feedback
+        button.disabled = true;
+        button.textContent = 'Reloading page...';
+
+        try {
+          // --- RELOAD Active TAB BEFORE Loading vouchers ---
+          await reloadTabAndWait(tab.id);
+        } catch (error) {
+          console.error('Failed to reload tab:', error);
+          displayMessage('The page failed to reload correctly. Please try again.', 'error');
+          button.disabled = false;
+          button.textContent = 'Load Vouchers';
+          return;
+        }
         displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
