@@ -152,8 +152,8 @@ h3 {
 
 /* New style for messages */
 #popup-message-container {
-  min-height: 20px; /* Ensure space for messages */
-  margin-bottom: 10px;
+  min-height: 20px; /* Reserve space for messages */
+  margin-top: 15px; /* Add space above the message area */
 }
 
 .popup-message {

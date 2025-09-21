@@ -6,10 +6,10 @@ document.addEventListener('DOMContentLoaded', function() {
   const mainView = document.getElementById('main-view');
   const voucherView = document.getElementById('voucher-view');
 
-  // Create a new container for messages and prepend it to the app container
+  // Create a new container for messages and append it to the app container
   const messageContainer = document.createElement('div');
   messageContainer.id = 'popup-message-container';
-  appContainer.prepend(messageContainer);
+  appContainer.appendChild(messageContainer);
 
   /**
    * Displays a message in the popup.
