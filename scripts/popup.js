@@ -225,16 +225,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const storageKey = `${brand}_vouchers`;
       chrome.storage.local.get([storageKey], async (result) => {
-        const vouchers = result[storageKey];
+        const allVouchers = result[storageKey] || [];
+        const vouchersToLoad = allVouchers.filter(v => v.status !== 'REDEEMED');
 
-        if (!vouchers || vouchers.length === 0) {
-          displayMessage(`No vouchers found for ${brand}. Please import vouchers first.`, 'error');
+        if (vouchersToLoad.length === 0) {
+          displayMessage(`No available vouchers to load for ${brand}.`, 'info');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
         }
         
-        displayMessage(`Starting to load ${vouchers.length} vouchers for ${brand}...`, 'info');
+        displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
           displayMessage(`No loading logic defined for ${brand}.`, 'error');
@@ -246,45 +247,52 @@ document.addEventListener('DOMContentLoaded', function() {
         let successfulLoads = 0;
         let failedLoads = 0;
 
-        // Disable the button to prevent multiple clicks during operation
         button.textContent = 'Loading...';
 
         let i = 0;
-        for (const voucher of vouchers) {
+        for (const voucher of vouchersToLoad) {
           try {
             const [injectionResult] = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: loadLogic,
-              args: [voucher.VoucherCode, voucher.VoucherPin], // Pass voucher data as arguments
+              args: [voucher.VoucherCode, voucher.VoucherPin],
             });
 
-            // Check the return value from our injected script
             const result = injectionResult.result;
             if (result && result.success) {
               successfulLoads++;
+              voucher.status = 'REDEEMED';
             } else {
               failedLoads++;
+              voucher.status = 'ERROR';
               const errorMessage = result ? result.message : 'An unknown error occurred.';
               displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
               console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
             }
 
-            // Wait for a moment to let the page process the submission (e.g., via AJAX)
-            await new Promise(resolve => setTimeout(resolve, 4000)); // 4-second delay
+            await new Promise(resolve => setTimeout(resolve, 4000));
           } catch (error) {
             failedLoads++;
+            voucher.status = 'ERROR'; // Also set status on critical error
             console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
             displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
-            break; // Stop the loop if a critical error occurs
+            break;
           }
           i++;
-          button.textContent = `Loading... (${i}/${vouchers.length})`;
+          button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
           await reloadTabAndWait(tab.id);
         }
-        // Re-enable the button and provide a summary
-        button.disabled = false;
-        button.textContent = 'Load Vouchers';
-        displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
+
+        // Save all updated statuses back to storage
+        chrome.storage.local.set({ [storageKey]: allVouchers }, () => {
+          if (chrome.runtime.lastError) {
+            displayMessage('Error saving updated voucher statuses.', 'error');
+          }
+          // Re-enable the button and provide a summary
+          button.disabled = false;
+          button.textContent = 'Load Vouchers';
+          displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
+        });
       });
     });
   });
@@ -458,7 +466,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const existingVoucherCodes = new Set(existingVouchers.map(v => v.VoucherCode));
 
       // Filter out any new vouchers that already exist in storage.
-      const uniqueNewVouchers = newVouchers.filter(v => !existingVoucherCodes.has(v.VoucherCode));
+      const uniqueNewVouchers = newVouchers
+        .filter(v => !existingVoucherCodes.has(v.VoucherCode))
+        .map(v => ({ ...v, status: 'AVAILABLE' })); // Add default status
       const duplicatesFound = newVouchers.length - uniqueNewVouchers.length;
 
       if (uniqueNewVouchers.length === 0) {
@@ -537,10 +547,19 @@ document.addEventListener('DOMContentLoaded', function() {
         <th>Pin</th>
         <th>Value</th>
         <th>Expiry</th>
+        <th>Status</th>
       </tr></thead><tbody>`;
 
     vouchers.forEach(voucher => {
-      tableHTML += `<tr><td>${voucher.VoucherCode || 'N/A'}</td><td>${voucher.VoucherPin || 'N/A'}</td><td>${voucher.VoucherValue || 'N/A'}</td><td>${voucher.ExpiryDate || 'N/A'}</td></tr>`;
+      const status = voucher.status || 'AVAILABLE'; // Default for old data
+      const statusClass = `status-${status.toLowerCase()}`;
+      tableHTML += `<tr>
+        <td>${voucher.VoucherCode || 'N/A'}</td>
+        <td>${voucher.VoucherPin || 'N/A'}</td>
+        <td>${voucher.VoucherValue || 'N/A'}</td>
+        <td>${voucher.ExpiryDate || 'N/A'}</td>
+        <td class="${statusClass}">${status}</td>
+      </tr>`;
     });
 
     tableHTML += `</tbody></table>`;

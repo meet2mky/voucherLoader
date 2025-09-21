@@ -213,3 +213,18 @@ tr:nth-child(even) {
   font-size: 1.1em;
   padding: 20px 0;
 }
+
+/* --- Styles for voucher status --- */
+td[class^="status-"] {
+  font-weight: bold;
+  text-transform: capitalize;
+}
+.status-available {
+  color: var(--primary-color);
+}
+.status-redeemed {
+  color: var(--success-color);
+}
+.status-error {
+  color: var(--message-error-text);
+}
