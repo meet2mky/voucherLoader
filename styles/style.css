@@ -1,5 +1,5 @@
 body {
-  width: 300px;
+  min-width: 300px; /* Allow the panel to expand */
   font-family: Arial, sans-serif;
   padding: 15px;
   background-color: #f4f7f6;
@@ -31,6 +31,9 @@ body {
 
 .container {
   text-align: center;
+  width: 100%;
+  max-width: 450px; /* Prevent content from becoming too wide */
+  margin: 0 auto; /* Center the container within the body */
 }
 
 .header {
