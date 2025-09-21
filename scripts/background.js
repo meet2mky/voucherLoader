@@ -1,8 +1,5 @@
+// This listener opens the side panel when the user clicks the extension's icon.
 chrome.action.onClicked.addListener((tab) => {
-  chrome.windows.create({
-    url: `popup.html?tabId=${tab.id}`,
-    type: 'popup',
-    width: 400,
-    height: 600
-  });
+  // This opens the side panel in the current window.
+  chrome.sidePanel.open({ windowId: tab.windowId });
 });

@@ -6,6 +6,29 @@ body {
   color: #333;
 }
 
+/* Define CSS variables for colors */
+:root {
+  --primary-color: #1a73e8; /* Header color, selected border */
+  --success-color: #4CAF50; /* Button background */
+  --success-hover-color: #45a049; /* Button hover */
+  --secondary-btn-color: #6c757d; /* Back button */
+  --secondary-btn-hover-color: #5a6268; /* Back button hover */
+  --border-color-light: #ddd;
+  --background-color-light: #f4f7f6;
+  --background-color-white: #fff;
+  --text-color-dark: #333;
+  --text-color-medium: #555;
+  --text-color-light: #777;
+  --table-header-bg: #f2f2f2;
+  --table-row-even-bg: #f9f9f9;
+  --message-success-bg: #d4edda;
+  --message-success-text: #155724;
+  --message-error-bg: #f8d7da;
+  --message-error-text: #721c24;
+  --message-info-bg: #d1ecf1;
+  --message-info-text: #0c5460;
+}
+
 .container {
   text-align: center;
 }
@@ -25,7 +48,7 @@ body {
 
 h1 {
   font-size: 20px;
-  color: #1a73e8;
+  color: var(--primary-color);
 }
 
 .selection-container {
@@ -41,7 +64,7 @@ h1 {
 }
 
 .category-item {
-  border: 2px solid #ddd;
+  border: 2px solid var(--border-color-light);
   border-radius: 12px;
   padding: 10px;
   cursor: pointer;
@@ -49,24 +72,24 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #fff;
+  background-color: var(--background-color-white);
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .category-item:hover {
-  border-color: #45a049; /* Match button hover color */
+  border-color: var(--success-hover-color);
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
 .category-item.selected {
-  border-color: #1a73e8; /* Match header color */
+  border-color: var(--primary-color);
   box-shadow: 0 0 10px rgba(26, 115, 232, 0.5);
 }
 
 .category-item img {
-  height: 40px; /* Defines the height of the container box */
-  width: 80px;  /* Defines the width of the container box */
+  max-height: 40px; /* Defines the maximum height of the image */
+  max-width: 80px;  /* Defines the maximum width of the image */
   object-fit: contain; /* Scales the image to fit inside the box without distortion */
   pointer-events: none; /* Prevents image from being the event target */
 }
@@ -81,7 +104,7 @@ label {
 }
 
 h3 {
-  color: #555;
+  color: var(--text-color-medium);
   margin-bottom: 15px;
 }
 
@@ -90,8 +113,8 @@ h3 {
   padding: 10px;
   margin: 5px 0;
   border: none;
-  border-radius: 5px;
-  background-color: #4CAF50;
+  border-radius: 5px; 
+  background-color: var(--success-color);
   color: white;
   cursor: pointer;
   font-size: 14px;
@@ -99,7 +122,7 @@ h3 {
 }
 
 .action-btn:hover {
-  background-color: #45a049;
+  background-color: var(--success-hover-color);
 }
 
 /* --- Styles for the in-popup voucher view --- */
@@ -112,19 +135,39 @@ h3 {
 
 .voucher-view-header h3 {
   margin: 0;
-  color: #1a73e8;
+  color: var(--primary-color);
   font-size: 16px;
 }
 
 .back-btn {
-  background-color: #6c757d;
+  background-color: var(--secondary-btn-color);
   padding: 5px 10px;
   font-size: 12px;
   width: auto;
 }
 
 .back-btn:hover {
-  background-color: #5a6268;
+  background-color: var(--secondary-btn-hover-color);
+}
+
+/* New style for messages */
+#popup-message-container {
+  min-height: 20px; /* Ensure space for messages */
+  margin-bottom: 10px;
+}
+
+.popup-message {
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  text-align: center;
+  opacity: 0; /* Start hidden */
+  transition: opacity 0.3s ease-in-out;
+}
+
+.popup-message.show {
+  opacity: 1;
 }
 
 table {
@@ -141,17 +184,30 @@ th, td {
 }
 
 th {
-  background-color: #f2f2f2;
+  background-color: var(--table-header-bg);
   font-weight: bold;
 }
 
 tr:nth-child(even) {
-  background-color: #f9f9f9;
+  background-color: var(--table-row-even-bg);
+}
+
+.popup-message.success {
+  background-color: var(--message-success-bg);
+  color: var(--message-success-text);
+}
+.popup-message.error {
+  background-color: var(--message-error-bg);
+  color: var(--message-error-text);
+}
+.popup-message.info {
+  background-color: var(--message-info-bg);
+  color: var(--message-info-text);
 }
 
 #no-vouchers-message {
-  text-align: center;
-  color: #777;
+  text-align: center; 
+  color: var(--text-color-light);
   font-size: 1.1em;
   padding: 20px 0;
 }

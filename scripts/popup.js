@@ -6,6 +6,32 @@ document.addEventListener('DOMContentLoaded', function() {
   const mainView = document.getElementById('main-view');
   const voucherView = document.getElementById('voucher-view');
 
+  // Create a new container for messages and prepend it to the app container
+  const messageContainer = document.createElement('div');
+  messageContainer.id = 'popup-message-container';
+  appContainer.prepend(messageContainer);
+
+  /**
+   * Displays a message in the popup.
+   * @param {string} message The message to display.
+   * @param {'success'|'error'|'info'} type The type of message.
+   * @param {number} duration How long to display the message in ms. Default 5000.
+   */
+  function displayMessage(message, type, duration = 5000) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `popup-message ${type}`;
+    msgDiv.textContent = message;
+    messageContainer.appendChild(msgDiv);
+
+    // Show and then hide
+    setTimeout(() => msgDiv.classList.add('show'), 10); // Small delay for CSS transition
+
+    setTimeout(() => {
+      msgDiv.classList.remove('show');
+      msgDiv.addEventListener('transitionend', () => msgDiv.remove());
+    }, duration);
+  }
+
   // State
   let activeCategory = null;
 
@@ -24,56 +50,57 @@ document.addEventListener('DOMContentLoaded', function() {
       // Helper function to create a delay, allowing the page to react.
       const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-      // Step 1: Click the button to reveal the gift card input form..
-      const openFormButton = document.querySelector('.balance-giftCardButton');
-      if (!openFormButton) {
-        alert('Could not find the initial "Add Gift Card" button. The website layout may have changed.');
-        return false; // Indicate failure
+      try {
+        // Step 1: Click the button to reveal the gift card input form..
+        const openFormButton = document.querySelector('.balance-giftCardButton');
+        if (!openFormButton) {
+          return { success: false, message: 'Could not find the initial "Add Gift Card" button.' };
+        }
+        openFormButton.click();
+        await sleep(1000);
+
+        // Step 2: Find the actual input fields and fill them.
+        const codeInput = document.querySelector('input[name="gcnumber"]');
+        const pinInput = document.querySelector('input[name="gcpin"]');
+        if (!codeInput || !pinInput) {
+          return { success: false, message: 'Could not find voucher input fields after clicking.' };
+        }
+
+        // Step 3: Fill the inputs.
+        codeInput.value = voucherCode;
+        codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        pinInput.value = voucherPin;
+        pinInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(500);
+
+        // Step 4: Click the final button.
+        const finalAddButton = document.querySelector('.addCard-showButton');
+        if (!finalAddButton) {
+          return { success: false, message: 'Could not find the final "Add to Account" button.' };
+        }
+        finalAddButton.click();
+        return { success: true, message: `Voucher ${voucherCode} submitted.` };
+      } catch (error) {
+        return { success: false, message: `An unexpected error occurred: ${error.message}` };
       }
-      openFormButton.click();
-
-      // Step 2: Wait for the form to become visible.
-      await sleep(3000); // 3 second delay
-
-      // Step 3: Now find the actual input fields and fill them.
-      const codeInput = document.querySelector('input[name="gcnumber"]');
-      const pinInput = document.querySelector('input[name="gcpin"]');
-
-      if (!codeInput || !pinInput) {
-        alert('Could not find the voucher input fields after clicking. The website structure may have changed.');
-        return false; // Indicate failure
-      }
-
-      // Step 4: Fill the gcnumber and gcpin.
-      codeInput.value = voucherCode;
-      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
-      pinInput.value = voucherPin;
-      pinInput.dispatchEvent(new Event('input', { bubbles: true }));
-      
-      await sleep(3000)
-      const finalAddButton = document.querySelector('.addCard-showButton')
-      if (!finalAddButton) {
-        alert('Could not find the final add button.')
-        return false
-      }
-      finalAddButton.click()
-      await sleep(3000)
-      return true; // Indicate success
     },
-    amazon: function(voucherCode) {
-      // NOTE: These selectors are placeholders for Amazon's gift card page.
-      const codeInput = document.querySelector('input#gc-redemption-input'); // Example selector
-      const addButton = document.querySelector('input[name*="add-to-balance"]'); // Example selector
+    amazon: async function(voucherCode) {
+      // NOTE: This logic is a placeholder and may need adjustment for the live site.
+      try {
+        const codeInput = document.querySelector('input#gc-redemption-input');
+        const addButton = document.querySelector('input[name*="add-to-balance"]');
 
-      if (!codeInput || !addButton) {
-        alert('Could not find the gift card input field or button on the page. The website structure may have changed.');
-        return false; // Indicate failure
+        if (!codeInput || !addButton) {
+          return { success: false, message: 'Could not find the gift card input field or button.' };
+        }
+
+        codeInput.value = voucherCode;
+        codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        addButton.click();
+        return { success: true, message: `Voucher ${voucherCode} submitted.` };
+      } catch (error) {
+        return { success: false, message: `An unexpected error occurred: ${error.message}` };
       }
-
-      codeInput.value = voucherCode;
-      codeInput.dispatchEvent(new Event('input', { bubbles: true }));
-      addButton.click();
-      return true; // Indicate success
     }
   };
 
@@ -140,31 +167,36 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Get tabId from URL parameters
-  const urlParams = new URLSearchParams(window.location.search);
-  const tabId = parseInt(urlParams.get('tabId'), 10);
-
   // Add event listeners for the new "Load Vouchers" buttons
   document.querySelectorAll('.load-vouchers-btn').forEach(button => {
     button.addEventListener('click', async () => {
       const actionContainer = button.closest('.action-container');
       const brand = actionContainer.dataset.category;
 
-      if (!tabId) {
-        alert('Target tab ID not found. Please ensure the extension was opened from a valid tab.');
+      let tab;
+      try {
+        // When used as a side panel or popup, we must query for the active tab.
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || tabs.length === 0) {
+          displayMessage('Could not find the active tab.', 'error');
+          return;
+        }
+        tab = tabs[0];
+      } catch (error) {
+        displayMessage('Could not get tab details. The tab may have been closed.', 'error');
         return;
       }
 
-      const tab = await chrome.tabs.get(tabId);
-
       if (!tab) {
-        alert('Could not get tab details. The tab may have been closed.');
+        displayMessage('Could not get tab details. The tab may have been closed.', 'error');
         return;
       }
 
       const expectedUrl = BRAND_URL_MAP[brand];
       if (!tab.url || !tab.url.startsWith(expectedUrl)) {
-        alert(`Please open the extension from the correct ${brand} voucher page and try again.`);
+        displayMessage(
+          `Please open from the correct ${brand} voucher page. Expected URL: ${expectedUrl}`, 'error', 7000
+        );
         return;
       }
 
@@ -177,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
         await reloadTabAndWait(tab.id);
       } catch (error) {
         console.error('Failed to reload tab:', error);
-        alert('The page failed to reload correctly. Please try again.');
+        displayMessage('The page failed to reload correctly. Please try again.', 'error');
         button.disabled = false;
         button.textContent = 'Load Vouchers';
         return;
@@ -188,16 +220,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const vouchers = result[storageKey];
 
         if (!vouchers || vouchers.length === 0) {
-          alert(`No vouchers found for ${brand}. Please insert vouchers from a file first.`);
+          displayMessage(`No vouchers found for ${brand}. Please import vouchers first.`, 'info');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
         }
         
-        alert(`Loading ${vouchers.length} vouchers for ${brand}...`);
+        displayMessage(`Starting to load ${vouchers.length} vouchers for ${brand}...`, 'info');
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
-          alert(`No loading logic defined for ${brand}.`);
+          displayMessage(`No loading logic defined for ${brand}.`, 'error');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
@@ -209,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Disable the button to prevent multiple clicks during operation
         button.textContent = 'Loading...';
 
+        let i = 0;
         for (const voucher of vouchers) {
           try {
             const [injectionResult] = await chrome.scripting.executeScript({
@@ -217,12 +250,15 @@ document.addEventListener('DOMContentLoaded', function() {
               args: [voucher.VoucherCode, voucher.VoucherPin], // Pass voucher data as arguments
             });
 
-            // Check the return value from our injected function
-            if (injectionResult && injectionResult.result) {
+            // Check the return value from our injected script
+            const result = injectionResult.result;
+            if (result && result.success) {
               successfulLoads++;
             } else {
               failedLoads++;
-              alert(`Voucher loading failed for voucher ${voucher.VoucherCode}. Click Ok to continue...`);
+              const errorMessage = result ? result.message : 'An unknown error occurred.';
+              displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
+              console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
             }
 
             // Wait for a moment to let the page process the submission (e.g., via AJAX)
@@ -230,15 +266,17 @@ document.addEventListener('DOMContentLoaded', function() {
           } catch (error) {
             failedLoads++;
             console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
-            alert(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.\n\nError: ${error.message}`);
+            displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
             break; // Stop the loop if a critical error occurs
           }
+          i++;
+          button.textContent = `Loading... (${i}/${vouchers.length})`;
           await reloadTabAndWait(tab.id);
         }
         // Re-enable the button and provide a summary
         button.disabled = false;
         button.textContent = 'Load Vouchers';
-        alert(`Voucher loading complete.\n\nSuccessfully loaded: ${successfulLoads}\nFailed: ${failedLoads}`);
+        displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
       });
     });
   });
@@ -290,8 +328,8 @@ document.addEventListener('DOMContentLoaded', function() {
       if (confirmation) {
         // Set the voucher list for the active category to an empty array
         chrome.storage.local.set({ [storageKey]: [] }, () => {
+          displayMessage(`${activeCategory} vouchers have been cleared successfully.`, 'success');
           console.log(`${activeCategory} vouchers cleared.`);
-          alert(`${activeCategory} vouchers have been cleared successfully.`);
         });
       }
     }
@@ -311,19 +349,27 @@ document.addEventListener('DOMContentLoaded', function() {
    * @param {string} category The currently active category.
    */
   async function handleGmailImport(category) {
-    if (!tabId) {
-      alert('Target tab ID not found. Please ensure the extension was opened from a valid tab.');
+    let tab;
+    try {
+      // When used as a side panel or popup, we must query for the active tab.
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tabs || tabs.length === 0) {
+        displayMessage('Could not find the active tab.', 'error');
+        return;
+      }
+      tab = tabs[0];
+    } catch (error) {
+      displayMessage('Could not get tab details. The tab may have been closed.', 'error');
       return;
     }
 
-    const tab = await chrome.tabs.get(tabId);
     if (!tab) {
-      alert('Could not get tab details. The tab may have been closed.');
+      displayMessage('Could not get tab details. The tab may have been closed.', 'error');
       return;
     }
 
     if (!tab.url || !tab.url.startsWith('https://mail.google.com/')) {
-      alert('This feature only works on a Gmail tab. Please navigate to Gmail and try again.');
+      displayMessage('This feature only works on a Gmail tab. Please navigate to Gmail and try again.', 'error');
       return;
     }
 
@@ -337,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Email is open, now scrape it using brand-specific logic.
         const scrapeLogic = BRAND_SCRAPE_LOGIC[category];
         if (!scrapeLogic) {
-          alert(`No Gmail scraping logic defined for ${category}.`);
+          displayMessage(`No Gmail scraping logic defined for ${category}.`, 'error');
           return;
         }
 
@@ -347,26 +393,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         if (!scrapeInjectionResult || !scrapeInjectionResult.result) {
-          alert('Scraping failed: Did not get a result from the page.');
+          displayMessage('Scraping failed: Did not get a result from the page.', 'error');
           return;
         }
 
         const { vouchers, error } = scrapeInjectionResult.result;
 
         if (error) {
-          alert(`Scraping failed: ${error}`);
+          displayMessage(`Scraping failed: ${error}`, 'error');
         } else if (vouchers && vouchers.length > 0) {
           console.log('Scraped vouchers:', vouchers);
           addVouchersToStorage(category, vouchers);
         } else {
-          alert('No vouchers were found in the email.');
+          displayMessage('No vouchers were found in the email.', 'info');
         }
       } else {
-        alert('No email is currently open for reading. Please open an email and try again.');
+        displayMessage('No email is currently open for reading. Please open an email and try again.', 'info');
       }
     } catch (error) {
       console.error('Failed to inject script:', error);
-      alert('Could not check the Gmail tab. Please reload the tab and try again.');
+      displayMessage('Could not check the Gmail tab. Please reload the tab and try again.', 'error');
     }
   }
 
@@ -405,7 +451,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (duplicatesFound > 0) {
           message += ` ${duplicatesFound} duplicate(s) were found and ignored.`;
         }
-        alert(message);
+        displayMessage(message, 'info');
         return;
       }
 
@@ -414,14 +460,14 @@ document.addEventListener('DOMContentLoaded', function() {
       chrome.storage.local.set({ [storageKey]: combinedVouchers }, () => {
         if (chrome.runtime.lastError) {
           console.error('Error saving vouchers:', chrome.runtime.lastError);
-          alert('An error occurred while saving the vouchers.');
+          displayMessage('An error occurred while saving the vouchers.', 'error');
         } else {
           let message = `${uniqueNewVouchers.length} new voucher(s) successfully added for ${category}!`;
           if (duplicatesFound > 0) {
             message += `\n${duplicatesFound} duplicate(s) were ignored.`;
           }
           console.log(`${uniqueNewVouchers.length} vouchers added for ${category}.`);
-          alert(message);
+          displayMessage(message, 'success');
         }
       });
     });
