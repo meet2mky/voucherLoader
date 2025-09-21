@@ -64,6 +64,8 @@ h1 {
 }
 
 .category-item {
+  width: 100px;
+  height: 60px;
   border: 2px solid var(--border-color-light);
   border-radius: 12px;
   padding: 10px;

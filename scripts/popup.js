@@ -286,20 +286,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedCategoryItem = event.currentTarget;
     const selectedCategory = selectedCategoryItem.dataset.category;
 
-    // If the clicked item is already selected, deselect it and hide actions.
+    // If the clicked item is already selected, deselect it and show all items.
     if (selectedCategoryItem.classList.contains('selected')) {
       selectedCategoryItem.classList.remove('selected');
       activeCategory = null;
-      actionContainers.forEach(container => container.style.display = 'none');
+      // Hide all action containers
+      actionContainers.forEach(container => (container.style.display = 'none'));
+      // Show all category items
+      categoryItems.forEach(item => (item.style.display = 'flex'));
       return;
     }
 
-    // Update visual state for all category items
-    categoryItems.forEach(item => item.classList.remove('selected'));
-    selectedCategoryItem.classList.add('selected');
+    // A new item is being selected.
     activeCategory = selectedCategory;
 
-    // Show/hide action sections based on selection
+    // Hide other items, remove their 'selected' class, and show the correct action container.
+    categoryItems.forEach(item => {
+      item.style.display = item === selectedCategoryItem ? 'flex' : 'none';
+      item.classList.remove('selected');
+    });
+    selectedCategoryItem.classList.add('selected');
+
     actionContainers.forEach(container => {
       container.style.display = container.dataset.category === selectedCategory ? 'block' : 'none';
     });
