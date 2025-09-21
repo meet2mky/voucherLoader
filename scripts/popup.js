@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (!tab.url || !tab.url.startsWith('https://mail.google.com/')) {
-      displayMessage('This feature only works on a Gmail tab. Please navigate to Gmail and try again.', 'error');
+      displayMessage('Please navigate to Gmail and try again.', 'error');
       return;
     }
 
@@ -390,7 +390,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Email is open, now scrape it using brand-specific logic.
         const scrapeLogic = BRAND_SCRAPE_LOGIC[category];
         if (!scrapeLogic) {
-          displayMessage(`No Gmail scraping logic defined for ${category}.`, 'error');
+          displayMessage(`No scraping logic defined for ${category}.`, 'error');
           return;
         }
 
@@ -412,10 +412,10 @@ document.addEventListener('DOMContentLoaded', function() {
           console.log('Scraped vouchers:', vouchers);
           addVouchersToStorage(category, vouchers);
         } else {
-          displayMessage('No vouchers were found in the email.', 'info');
+          displayMessage('No vouchers were found in the email.', 'error');
         }
       } else {
-        displayMessage('No email is currently open for reading. Please open an email and try again.', 'info');
+        displayMessage('No email is currently open for reading. Please open an email and try again.', 'error');
       }
     } catch (error) {
       console.error('Failed to inject script:', error);
@@ -473,7 +473,6 @@ document.addEventListener('DOMContentLoaded', function() {
           if (duplicatesFound > 0) {
             message += `\n${duplicatesFound} duplicate(s) were ignored.`;
           }
-          console.log(`${uniqueNewVouchers.length} vouchers added for ${category}.`);
           displayMessage(message, 'success');
         }
       });
