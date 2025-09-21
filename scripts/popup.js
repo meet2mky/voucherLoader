@@ -35,11 +35,17 @@ document.addEventListener('DOMContentLoaded', function() {
   // State
   let activeCategory = null;
 
-  // A centralized map for brand-specific voucher page information
-  const BRAND_URL_MAP = {
+  // A centralized map for brand-specific loading voucher page information
+  const BRAND_LOAD_URL_MAP = {
     myntra: 'https://www.myntra.com/my/myntracredit',
     amazon: 'https://www.amazon.in/gp/aw/ya/gcb'
   };
+  // A centralized map for brand-specific website information
+  const BRAND_URL_MAP = {
+    myntra: 'https://www.myntra.com/',
+    amazon: 'https://www.amazon.in/'
+  };
+  const GMAIL_URL = 'https://mail.google.com/';
 
   /**
    * A map of injectable functions that contain the logic for adding a voucher on each brand's website.
@@ -192,11 +198,13 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      const expectedUrl = BRAND_URL_MAP[brand];
-      if (!tab.url || !tab.url.startsWith(expectedUrl)) {
-        displayMessage(
-          `Please open from the correct ${brand} voucher page. Expected URL: ${expectedUrl}`, 'error', 7000
-        );
+      if (!tab.url || !tab.url.startsWith(BRAND_URL_MAP[brand])) {
+        displayMessage('Please navigate to Myntra and try again.', 'error');
+        return;
+      }
+
+      if (!tab.url.startsWith(BRAND_LOAD_URL_MAP[brand])) {
+        displayMessage(`Please open the Myntra Credit page and try again.`, 'error');
         return;
       }
 
@@ -220,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const vouchers = result[storageKey];
 
         if (!vouchers || vouchers.length === 0) {
-          displayMessage(`No vouchers found for ${brand}. Please import vouchers first.`, 'info');
+          displayMessage(`No vouchers found for ${brand}. Please import vouchers first.`, 'error');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
@@ -375,8 +383,8 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    if (!tab.url || !tab.url.startsWith('https://mail.google.com/')) {
-      displayMessage('Please navigate to Gmail and try again.', 'error');
+    if (!tab.url || !tab.url.startsWith(GMAIL_URL)) {
+      displayMessage('Please navigate to Gmail and try again, current url is: ' + tab.url,  'error');
       return;
     }
 
