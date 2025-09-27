@@ -51,5 +51,12 @@ export async function reloadTabAndWait(tabId) {
  */
 export function isEmailOpenByURL() {
   const hash = window.location.hash;
-  return hash.includes('/') && hash.split('/')[1].length > 20;
+  // An open email URL in Gmail has a long, unique ID as the last part of its hash.
+  // e.g., #inbox/some-long-id or #label/some-label/some-long-id
+  // We check if the hash contains a '/' and if the last segment is long enough
+  // to be considered an email ID.
+  const parts = hash.split('/');
+  const lastPart = parts[parts.length - 1];
+
+  return hash.includes('/') && lastPart.length > 20;
 }
