@@ -2,40 +2,19 @@ import { myntraLoadLogic } from './load/myntra-load.js';
 import { amazonLoadLogic } from './load/amazon-load.js';
 import { myntraScrapeLogic } from './scrape/myntra-scrape.js';
 import { amazonScrapeLogic } from './scrape/amazon-scrape.js';
+import * as ui from './ui.js';
+import * as storage from './storage.js';
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM Elements
   const categoryItems = document.querySelectorAll('.category-item');
   const actionContainers = document.querySelectorAll('.action-container');
   const appContainer = document.getElementById('app-container');
-  const mainView = document.getElementById('main-view');
-  const voucherView = document.getElementById('voucher-view');
 
   // Create a new container for messages and append it to the app container
   const messageContainer = document.createElement('div');
   messageContainer.id = 'popup-message-container';
   appContainer.appendChild(messageContainer);
-
-  /**
-   * Displays a message in the popup.
-   * @param {string} message The message to display.
-   * @param {'success'|'error'|'info'} type The type of message.
-   * @param {number} duration How long to display the message in ms. Default 5000.
-   */
-  function displayMessage(message, type, duration = 5000) {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `popup-message ${type}`;
-    msgDiv.textContent = message;
-    messageContainer.appendChild(msgDiv);
-
-    // Show and then hide
-    setTimeout(() => msgDiv.classList.add('show'), 10); // Small delay for CSS transition
-
-    setTimeout(() => {
-      msgDiv.classList.remove('show');
-      msgDiv.addEventListener('transitionend', () => msgDiv.remove());
-    }, duration);
-  }
 
   // State
   let activeCategory = null;
@@ -104,42 +83,39 @@ document.addEventListener('DOMContentLoaded', function() {
         // When used as a side panel or popup, we must query for the active tab.
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tabs || tabs.length === 0) {
-          displayMessage('Could not find the active tab.', 'error');
+          ui.displayMessage('Could not find the active tab.', 'error');
           return;
         }
         tab = tabs[0];
       } catch (error) {
-        displayMessage('Could not get tab details. The tab may have been closed.', 'error');
+        ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
         return;
       }
 
       if (!tab) {
-        displayMessage('Could not get tab details. The tab may have been closed.', 'error');
+        ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
         return;
       }
 
       if (!tab.url || !tab.url.startsWith(BRAND_URL_MAP[brand])) {
-        displayMessage('Please navigate to Myntra and try again.', 'error');
+        ui.displayMessage(`Please navigate to the ${brand} website and try again.`, 'error');
         return;
       }
 
       if (!tab.url.startsWith(BRAND_LOAD_URL_MAP[brand])) {
-        displayMessage(`Please open the Myntra Credit page and try again.`, 'error');
+        ui.displayMessage(`Please open the correct voucher loading page for ${brand} and try again.`, 'error');
         return;
       }
 
-      const storageKey = `${brand}_vouchers`;
-      chrome.storage.local.get([storageKey], async (result) => {
-        const allVouchers = result[storageKey] || [];
+      try {
+        const allVouchers = await storage.getVouchers(brand);
         const vouchersToLoad = allVouchers.filter(v => v.status !== 'REDEEMED');
 
         if (vouchersToLoad.length === 0) {
-          displayMessage(`No available vouchers to load for ${brand}.`, 'info');
-          button.disabled = false;
-          button.textContent = 'Load Vouchers';
+          ui.displayMessage(`No available vouchers to load for ${brand}.`, 'info');
           return;
         }
-              // Disable button immediately to give user feedback
+        // Disable button immediately to give user feedback
         button.disabled = true;
         button.textContent = 'Reloading page...';
 
@@ -148,15 +124,15 @@ document.addEventListener('DOMContentLoaded', function() {
           await reloadTabAndWait(tab.id);
         } catch (error) {
           console.error('Failed to reload tab:', error);
-          displayMessage('The page failed to reload correctly. Please try again.', 'error');
+          ui.displayMessage('The page failed to reload correctly. Please try again.', 'error');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
         }
-        displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
+        ui.displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
         const loadLogic = BRAND_LOAD_LOGIC[brand];
         if (!loadLogic) {
-          displayMessage(`No loading logic defined for ${brand}.`, 'error');
+          ui.displayMessage(`No loading logic defined for ${brand}.`, 'error');
           button.disabled = false;
           button.textContent = 'Load Vouchers';
           return;
@@ -184,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
               failedLoads++;
               voucher.status = 'ERROR';
               const errorMessage = result ? result.message : 'An unknown error occurred.';
-              displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
+              ui.displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
               console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
             }
 
@@ -193,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
             failedLoads++;
             voucher.status = 'ERROR'; // Also set status on critical error
             console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
-            displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
+            ui.displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
             break;
           }
           i++;
@@ -202,16 +178,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Save all updated statuses back to storage
-        chrome.storage.local.set({ [storageKey]: allVouchers }, () => {
-          if (chrome.runtime.lastError) {
-            displayMessage('Error saving updated voucher statuses.', 'error');
-          }
-          // Re-enable the button and provide a summary
-          button.disabled = false;
-          button.textContent = 'Load Vouchers';
-          displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
-        });
-      });
+        await storage.saveVouchers(brand, allVouchers);
+        ui.displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
+
+      } catch (error) {
+        console.error('Error during voucher loading process:', error);
+        ui.displayMessage('A critical error occurred during the loading process.', 'error');
+      } finally {
+        // Re-enable the button
+        button.disabled = false;
+        button.textContent = 'Load Vouchers';
+      }
     });
   });
 
@@ -255,23 +232,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const target = event.target;
 
-    // Key for accessing storage, e.g., "myntra_vouchers"
-    const storageKey = `${activeCategory}_vouchers`;
-
     if (target.matches('.show-vouchers-btn')) {
       console.log(`Show vouchers for ${activeCategory} triggered.`);
-      showVoucherView(activeCategory);
+      storage.getVouchers(activeCategory).then(vouchers => {
+        ui.showVoucherView(activeCategory, vouchers);
+      });
     }
 
     if (target.matches('.clear-vouchers-btn')) {
       console.log(`Clear vouchers for ${activeCategory} triggered.`);
       const confirmation = confirm(`Are you sure you want to delete all vouchers for ${activeCategory}? This action cannot be undone.`);
       if (confirmation) {
-        // Set the voucher list for the active category to an empty array
-        chrome.storage.local.set({ [storageKey]: [] }, () => {
-          displayMessage(`${activeCategory} vouchers have been cleared successfully.`, 'success');
-          console.log(`${activeCategory} vouchers cleared.`);
-        });
+        storage.clearVouchers(activeCategory);
       }
     }
 
@@ -281,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (target.matches('.back-btn')) {
-      showMainView();
+      ui.showMainView();
     }
   });
 
@@ -295,22 +267,22 @@ document.addEventListener('DOMContentLoaded', function() {
       // When used as a side panel or popup, we must query for the active tab.
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tabs || tabs.length === 0) {
-        displayMessage('Could not find the active tab.', 'error');
+        ui.displayMessage('Could not find the active tab.', 'error');
         return;
       }
       tab = tabs[0];
     } catch (error) {
-      displayMessage('Could not get tab details. The tab may have been closed.', 'error');
+      ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
       return;
     }
 
     if (!tab) {
-      displayMessage('Could not get tab details. The tab may have been closed.', 'error');
+      ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
       return;
     }
 
     if (!tab.url || !tab.url.startsWith(GMAIL_URL)) {
-      displayMessage('Please navigate to Gmail and try again, current url is: ' + tab.url,  'error');
+      ui.displayMessage('Please navigate to Gmail and try again, current url is: ' + tab.url,  'error');
       return;
     }
 
@@ -324,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Email is open, now scrape it using brand-specific logic.
         const scrapeLogic = BRAND_SCRAPE_LOGIC[category];
         if (!scrapeLogic) {
-          displayMessage(`No scraping logic defined for ${category}.`, 'error');
+          ui.displayMessage(`No scraping logic defined for ${category}.`, 'error');
           return;
         }
 
@@ -334,26 +306,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         if (!scrapeInjectionResult || !scrapeInjectionResult.result) {
-          displayMessage('Scraping failed: Did not get a result from the page.', 'error');
+          ui.displayMessage('Scraping failed: Did not get a result from the page.', 'error');
           return;
         }
 
         const { vouchers, error } = scrapeInjectionResult.result;
 
         if (error) {
-          displayMessage(`Scraping failed: ${error}`, 'error');
+          ui.displayMessage(`Scraping failed: ${error}`, 'error');
         } else if (vouchers && vouchers.length > 0) {
           console.log('Scraped vouchers:', vouchers);
-          addVouchersToStorage(category, vouchers);
+          storage.addVouchers(category, vouchers);
         } else {
-          displayMessage('No vouchers were found in the email.', 'error');
+          ui.displayMessage('No vouchers were found in the email.', 'error');
         }
       } else {
-        displayMessage('No email is currently open for reading. Please open an email and try again.', 'error');
+        ui.displayMessage('No email is currently open for reading. Please open an email and try again.', 'error');
       }
     } catch (error) {
       console.error('Failed to inject script:', error);
-      displayMessage('Could not check the Gmail tab. Please reload the tab and try again.', 'error');
+      ui.displayMessage('Could not check the Gmail tab. Please reload the tab and try again.', 'error');
     }
   }
 
@@ -366,121 +338,5 @@ document.addEventListener('DOMContentLoaded', function() {
     // and contains a slash.
     const hash = window.location.hash;
     return hash.includes('/') && hash.split('/')[1].length > 20;
-  }
-
-  
-
-  /**
-   * Appends new, unique vouchers to the existing list in chrome.storage.
-   * @param {string} category The category to which the vouchers belong.
-   * @param {Array<Object>} newVouchers The new vouchers to add.
-   */
-  function addVouchersToStorage(category, newVouchers) {
-    const storageKey = `${category}_vouchers`;
-    chrome.storage.local.get([storageKey], result => {
-      const existingVouchers = result[storageKey] || [];
-
-      // Create a Set of existing voucher codes for efficient O(1) lookups.
-      const existingVoucherCodes = new Set(existingVouchers.map(v => v.VoucherCode));
-
-      // Filter out any new vouchers that already exist in storage.
-      const uniqueNewVouchers = newVouchers
-        .filter(v => !existingVoucherCodes.has(v.VoucherCode))
-        .map(v => ({ ...v, status: 'AVAILABLE' })); // Add default status
-      const duplicatesFound = newVouchers.length - uniqueNewVouchers.length;
-
-      if (uniqueNewVouchers.length === 0) {
-        let message = `No new vouchers to add for ${category}.`;
-        if (duplicatesFound > 0) {
-          message += ` ${duplicatesFound} duplicate(s) were found and ignored.`;
-        }
-        displayMessage(message, 'info');
-        return;
-      }
-
-      const combinedVouchers = existingVouchers.concat(uniqueNewVouchers);
-
-      chrome.storage.local.set({ [storageKey]: combinedVouchers }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('Error saving vouchers:', chrome.runtime.lastError);
-          displayMessage('An error occurred while saving the vouchers.', 'error');
-        } else {
-          let message = `${uniqueNewVouchers.length} new voucher(s) successfully added for ${category}!`;
-          if (duplicatesFound > 0) {
-            message += `\n${duplicatesFound} duplicate(s) were ignored.`;
-          }
-          displayMessage(message, 'success');
-        }
-      });
-    });
-  }
-
-  /**
-   * Hides the main view and displays the voucher list view.
-   * @param {string} category The category to display vouchers for.
-   */
-  function showVoucherView(category) {
-    mainView.style.display = 'none';
-    voucherView.style.display = 'block';
-
-    const storageKey = `${category}_vouchers`;
-    const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
-
-    // Create header for the voucher view
-    let viewHTML = `
-      <div class="voucher-view-header">
-        <h3>${categoryName} Vouchers</h3>
-        <button class="action-btn back-btn">Back</button>
-      </div>
-    `;
-
-    chrome.storage.local.get([storageKey], function(result) {
-      const vouchers = result[storageKey];
-      if (vouchers && vouchers.length > 0) {
-        viewHTML += createVoucherTable(vouchers);
-      } else {
-        viewHTML += '<p id="no-vouchers-message">No vouchers found for this category.</p>';
-      }
-      voucherView.innerHTML = viewHTML;
-    });
-  }
-
-  /**
-   * Hides the voucher view and displays the main view.
-   */
-  function showMainView() {
-    voucherView.style.display = 'none';
-    mainView.style.display = 'block';
-    voucherView.innerHTML = ''; // Clear the view to free up memory
-  }
-
-  /**
-   * Creates the HTML table for displaying vouchers.
-   * @param {Array<Object>} vouchers The array of voucher objects.
-   * @returns {string} The HTML string for the table.
-   */
-  function createVoucherTable(vouchers) {
-    let tableHTML = `<table><thead><tr>
-        <th>Code</th>
-        <th>Pin</th>
-        <th>Value</th>
-        <th>Expiry</th>
-        <th>Status</th>
-      </tr></thead><tbody>`;
-
-    vouchers.forEach(voucher => {
-      const status = voucher.status || 'AVAILABLE'; // Default for old data
-      const statusClass = `status-${status.toLowerCase()}`;
-      tableHTML += `<tr>
-        <td>${voucher.VoucherCode || 'N/A'}</td>
-        <td>${voucher.VoucherPin || 'N/A'}</td>
-        <td>${voucher.VoucherValue || 'N/A'}</td>
-        <td>${voucher.ExpiryDate || 'N/A'}</td>
-        <td class="${statusClass}">${status}</td>
-      </tr>`;
-    });
-
-    tableHTML += `</tbody></table>`;
-    return tableHTML;
   }
 });
