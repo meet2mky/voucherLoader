@@ -1,9 +1,6 @@
-import { myntraLoadLogic } from './load/myntra-load.js';
-import { amazonLoadLogic } from './load/amazon-load.js';
-import { myntraScrapeLogic } from './scrape/myntra-scrape.js';
-import { amazonScrapeLogic } from './scrape/amazon-scrape.js';
 import * as ui from './ui.js';
 import * as storage from './storage.js';
+import { brandConfig, GMAIL_URL } from './config.js';
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM Elements
@@ -18,36 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // State
   let activeCategory = null;
-
-  // A centralized map for brand-specific loading voucher page information
-  const BRAND_LOAD_URL_MAP = {
-    myntra: 'https://www.myntra.com/my/myntracredit',
-    amazon: 'https://www.amazon.in/gp/aw/ya/gcb'
-  };
-  // A centralized map for brand-specific website information
-  const BRAND_URL_MAP = {
-    myntra: 'https://www.myntra.com/',
-    amazon: 'https://www.amazon.in/'
-  };
-  const GMAIL_URL = 'https://mail.google.com/';
-
-  /**
-   * A map of injectable functions that contain the logic for adding a voucher on each brand's website.
-   * These functions are imported from separate files and executed in the context of the web page.
-   */
-  const BRAND_LOAD_LOGIC = {
-    myntra: myntraLoadLogic,
-    amazon: amazonLoadLogic
-  };
-
-  /**
-   * A map of injectable functions that contain the logic for scraping vouchers from Gmail for each brand.
-   * These functions are imported from separate files and executed in the context of the Gmail page.
-   */
-  const BRAND_SCRAPE_LOGIC = {
-    myntra: myntraScrapeLogic,
-    amazon: amazonScrapeLogic
-  };
 
   /**
    * Reloads a given tab and waits for it to be completely loaded.
@@ -97,12 +64,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      if (!tab.url || !tab.url.startsWith(BRAND_URL_MAP[brand])) {
+      if (!tab.url || !tab.url.startsWith(brandConfig[brand].url)) {
         ui.displayMessage(`Please navigate to the ${brand} website and try again.`, 'error');
         return;
       }
 
-      if (!tab.url.startsWith(BRAND_LOAD_URL_MAP[brand])) {
+      if (!tab.url.startsWith(brandConfig[brand].loadUrl)) {
         ui.displayMessage(`Please open the correct voucher loading page for ${brand} and try again.`, 'error');
         return;
       }
@@ -130,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
         ui.displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
-        const loadLogic = BRAND_LOAD_LOGIC[brand];
+        const loadLogic = brandConfig[brand].loadLogic;
         if (!loadLogic) {
           ui.displayMessage(`No loading logic defined for ${brand}.`, 'error');
           button.disabled = false;
@@ -294,7 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (injectionResult && injectionResult.result) {
         // Email is open, now scrape it using brand-specific logic.
-        const scrapeLogic = BRAND_SCRAPE_LOGIC[category];
+        const scrapeLogic = brandConfig[category].scrapeLogic;
         if (!scrapeLogic) {
           ui.displayMessage(`No scraping logic defined for ${category}.`, 'error');
           return;
