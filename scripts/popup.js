@@ -1,5 +1,7 @@
 import { myntraLoadLogic } from './load/myntra-load.js';
 import { amazonLoadLogic } from './load/amazon-load.js';
+import { myntraScrapeLogic } from './scrape/myntra-scrape.js';
+import { amazonScrapeLogic } from './scrape/amazon-scrape.js';
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM Elements
@@ -61,42 +63,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   /**
    * A map of injectable functions that contain the logic for scraping vouchers from Gmail for each brand.
-   * These functions are executed in the context of the Gmail page.
+   * These functions are imported from separate files and executed in the context of the Gmail page.
    */
   const BRAND_SCRAPE_LOGIC = {
-    myntra: function() {
-      // Gmail's email body is often in a div with class 'a3s' or 'ii gt'.
-      const emailBody = document.querySelector('.a3s, .ii.gt');
-      if (!emailBody) {
-        return { vouchers: null, error: 'Could not find the email body content. The Gmail page structure might have changed.' };
-      }
-
-      const text = emailBody.innerText;
-      const vouchers = [];
-
-      // This regex is designed to find all voucher blocks from iShop emails.
-      const voucherRegex = /Voucher Code:\s*(\S+)\s*Pin:\s*(\S+)\s*Denomination:\s*([\d,.]+)\s*Date of Expiry:\s*(.*?)(?=\s*Click here|\s*Voucher Code:|$)/gs;
-
-      let match;
-      while ((match = voucherRegex.exec(text)) !== null) {
-        vouchers.push({
-          VoucherCode: match[1].trim(),
-          VoucherPin: match[2].trim(),
-          VoucherValue: match[3].trim().replace(/,/g, ''),
-          ExpiryDate: match[4].trim()
-        });
-      }
-
-      if (vouchers.length === 0) {
-        return { vouchers: null, error: 'No vouchers found matching the expected iShop format (e.g., "Voucher Code: ... Pin: ...").' };
-      }
-
-      return { vouchers, error: null };
-    },
-    amazon: function() {
-      // Placeholder for future Amazon-specific scraping logic
-      return { vouchers: null, error: 'Scraping logic for Amazon is not yet implemented.' };
-    }
+    myntra: myntraScrapeLogic,
+    amazon: amazonScrapeLogic
   };
 
   /**
