@@ -3,6 +3,7 @@ import * as storage from './storage.js';
 import { brandConfig } from './config.js';
 import * as tabManager from './tab-manager.js';
 import * as emailImporter from './email-importer.js';
+import * as voucherLoader from './voucher-loader.js';
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM Elements
@@ -20,108 +21,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Add event listeners for the new "Load Vouchers" buttons
   document.querySelectorAll('.load-vouchers-btn').forEach(button => {
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', () => {
       const actionContainer = button.closest('.action-container');
       const brand = actionContainer.dataset.category;
-
-      const tab = await tabManager.getActiveTab();
-
-      if (!tab) {
-        return; // Error message is handled by getActiveTab
-      }
-
-      if (!tab.url || !tab.url.startsWith(brandConfig[brand].url)) {
-        ui.displayMessage(`Please navigate to the ${brand} website and try again.`, 'error');
-        return;
-      }
-
-      if (!tab.url.startsWith(brandConfig[brand].loadUrl)) {
-        ui.displayMessage(`Please open the correct voucher loading page for ${brand} and try again.`, 'error');
-        return;
-      }
-
-      try {
-        const allVouchers = await storage.getVouchers(brand);
-        const vouchersToLoad = allVouchers.filter(v => v.status !== 'REDEEMED');
-
-        if (vouchersToLoad.length === 0) {
-          ui.displayMessage(`No available vouchers to load for ${brand}.`, 'info');
-          return;
-        }
-        // Disable button immediately to give user feedback
-        button.disabled = true;
-        button.textContent = 'Reloading page...';
-
-        try {
-          // --- RELOAD Active TAB BEFORE Loading vouchers ---
-          await tabManager.reloadTabAndWait(tab.id);
-        } catch (error) {
-          console.error('Failed to reload tab:', error);
-          ui.displayMessage('The page failed to reload correctly. Please try again.', 'error');
-          button.disabled = false;
-          button.textContent = 'Load Vouchers';
-          return;
-        }
-        ui.displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
-        const loadLogic = brandConfig[brand].loadLogic;
-        if (!loadLogic) {
-          ui.displayMessage(`No loading logic defined for ${brand}.`, 'error');
-          button.disabled = false;
-          button.textContent = 'Load Vouchers';
-          return;
-        }
-
-        let successfulLoads = 0;
-        let failedLoads = 0;
-
-        button.textContent = 'Loading...';
-
-        let i = 0;
-        for (const voucher of vouchersToLoad) {
-          try {
-            const [injectionResult] = await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: loadLogic,
-              args: [voucher.VoucherCode, voucher.VoucherPin],
-            });
-
-            const result = injectionResult.result;
-            if (result && result.success) {
-              successfulLoads++;
-              voucher.status = 'REDEEMED';
-            } else {
-              failedLoads++;
-              voucher.status = 'ERROR';
-              const errorMessage = result ? result.message : 'An unknown error occurred.';
-              ui.displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
-              console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 4000));
-          } catch (error) {
-            failedLoads++;
-            voucher.status = 'ERROR'; // Also set status on critical error
-            console.error(`Error injecting script for voucher ${voucher.VoucherCode}:`, error);
-            ui.displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
-            break;
-          }
-          i++;
-          button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
-          await tabManager.reloadTabAndWait(tab.id);
-        }
-
-        // Save all updated statuses back to storage
-        await storage.saveVouchers(brand, allVouchers);
-        ui.displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
-
-      } catch (error) {
-        console.error('Error during voucher loading process:', error);
-        ui.displayMessage('A critical error occurred during the loading process.', 'error');
-      } finally {
-        // Re-enable the button
-        button.disabled = false;
-        button.textContent = 'Load Vouchers';
-      }
+      voucherLoader.loadVouchersForBrand(brand, button);
     });
   });
 
