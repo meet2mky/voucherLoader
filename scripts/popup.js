@@ -1,6 +1,7 @@
 import * as ui from './ui.js';
 import * as storage from './storage.js';
 import { brandConfig, GMAIL_URL } from './config.js';
+import * as tabManager from './tab-manager.js';
 
 document.addEventListener('DOMContentLoaded', function() {
   // DOM Elements
@@ -16,52 +17,16 @@ document.addEventListener('DOMContentLoaded', function() {
   // State
   let activeCategory = null;
 
-  /**
-   * Reloads a given tab and waits for it to be completely loaded.
-   * @param {number} tabId The ID of the tab to reload.
-   * @returns {Promise<void>} A promise that resolves when the tab has finished loading.
-   */
-  async function reloadTabAndWait(tabId) {
-    return new Promise((resolve, reject) => {
-      const listener = (updatedTabId, changeInfo) => {
-        // Ensure the update is for the correct tab and it has finished loading
-        if (updatedTabId === tabId && changeInfo.status === 'complete') {
-          // A small delay to ensure scripts on the reloaded page have initialized
-          setTimeout(() => {
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          }, 500); // 0.5s delay for safety
-        }
-      };
-
-      chrome.tabs.onUpdated.addListener(listener);
-      chrome.tabs.reload(tabId);
-    });
-  }
-
   // Add event listeners for the new "Load Vouchers" buttons
   document.querySelectorAll('.load-vouchers-btn').forEach(button => {
     button.addEventListener('click', async () => {
       const actionContainer = button.closest('.action-container');
       const brand = actionContainer.dataset.category;
 
-      let tab;
-      try {
-        // When used as a side panel or popup, we must query for the active tab.
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || tabs.length === 0) {
-          ui.displayMessage('Could not find the active tab.', 'error');
-          return;
-        }
-        tab = tabs[0];
-      } catch (error) {
-        ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
-        return;
-      }
+      const tab = await tabManager.getActiveTab();
 
       if (!tab) {
-        ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
-        return;
+        return; // Error message is handled by getActiveTab
       }
 
       if (!tab.url || !tab.url.startsWith(brandConfig[brand].url)) {
@@ -88,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
           // --- RELOAD Active TAB BEFORE Loading vouchers ---
-          await reloadTabAndWait(tab.id);
+          await tabManager.reloadTabAndWait(tab.id);
         } catch (error) {
           console.error('Failed to reload tab:', error);
           ui.displayMessage('The page failed to reload correctly. Please try again.', 'error');
@@ -141,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           i++;
           button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
-          await reloadTabAndWait(tab.id);
+          await tabManager.reloadTabAndWait(tab.id);
         }
 
         // Save all updated statuses back to storage
@@ -229,34 +194,21 @@ document.addEventListener('DOMContentLoaded', function() {
    * @param {string} category The currently active category.
    */
   async function handleGmailImport(category) {
-    let tab;
-    try {
-      // When used as a side panel or popup, we must query for the active tab.
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tabs || tabs.length === 0) {
-        ui.displayMessage('Could not find the active tab.', 'error');
-        return;
-      }
-      tab = tabs[0];
-    } catch (error) {
-      ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
-      return;
-    }
+    const tab = await tabManager.getActiveTab();
 
     if (!tab) {
-      ui.displayMessage('Could not get tab details. The tab may have been closed.', 'error');
-      return;
+      return; // Error message is handled by getActiveTab
     }
 
     if (!tab.url || !tab.url.startsWith(GMAIL_URL)) {
-      ui.displayMessage('Please navigate to Gmail and try again, current url is: ' + tab.url,  'error');
+      ui.displayMessage('Please navigate to Gmail and try again', 'error');
       return;
     }
 
     try {
       const [injectionResult] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: isEmailOpenByURL,
+        func: tabManager.isEmailOpenByURL,
       });
 
       if (injectionResult && injectionResult.result) {
@@ -294,16 +246,5 @@ document.addEventListener('DOMContentLoaded', function() {
       console.error('Failed to inject script:', error);
       ui.displayMessage('Could not check the Gmail tab. Please reload the tab and try again.', 'error');
     }
-  }
-
-  /**
-   * Injected function to check if an email is open by looking at the URL.
-   * @returns {boolean} True if an email is open, false otherwise.
-   */
-  function isEmailOpenByURL() {
-    // The hash for an open email is typically longer than just '#inbox', '#sent', etc.
-    // and contains a slash.
-    const hash = window.location.hash;
-    return hash.includes('/') && hash.split('/')[1].length > 20;
   }
 });
