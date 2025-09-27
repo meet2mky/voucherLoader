@@ -1,1 +1,0 @@
-alert('Executing Amazon voucher loading...');
