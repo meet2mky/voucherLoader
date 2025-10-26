@@ -10,8 +10,9 @@ import * as tabManager from './tab-manager.js';
  * Orchestrates the process of loading all available vouchers for a given brand onto the active tab.
  * @param {string} brand The brand category (e.g., 'myntra').
  * @param {HTMLButtonElement} button The button that triggered the action, used for UI feedback.
+ * @param {Function} [onProgress] Optional callback function to be called after each voucher is processed.
  */
-export async function loadVouchersForBrand(brand, button) {
+export async function loadVouchersForBrand(brand, button, onProgress) {
   const tab = await tabManager.getActiveTab();
 
   if (!tab) {
@@ -63,6 +64,8 @@ export async function loadVouchersForBrand(brand, button) {
 
     let i = 0;
     for (const voucher of vouchersToLoad) {
+      i++;
+      button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
       try {
         const [injectionResult] = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -82,7 +85,18 @@ export async function loadVouchersForBrand(brand, button) {
           console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
         }
 
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // Save progress to storage immediately after processing each voucher.
+        await storage.saveVouchers(brand, allVouchers);
+        // If a progress callback is provided, call it to update the UI.
+        if (onProgress) {
+          await onProgress();
+        }
+
+        // Wait for a period with jitter to mimic more human-like behavior and
+        // allow the website to process the submission before the next one.
+        const waitTime = 2000 + Math.random() * 2000; // 2-4 seconds
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+
       } catch (error) {
         failedLoads++;
         voucher.status = 'ERROR'; // Also set status on critical error
@@ -90,13 +104,9 @@ export async function loadVouchersForBrand(brand, button) {
         ui.displayMessage(`A critical error occurred while loading voucher ${voucher.VoucherCode}. Aborting.`, 'error', 8000);
         break;
       }
-      i++;
-      button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
-      await tabManager.reloadTabAndWait(tab.id);
     }
 
-    await storage.saveVouchers(brand, allVouchers);
-    ui.displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}`, 'info', 8000);
+    ui.displayMessage(`Voucher loading complete. Success: ${successfulLoads}, Failed: ${failedLoads}.`, 'info', 8000);
   } catch (error) {
     console.error('Error during voucher loading process:', error);
     ui.displayMessage('A critical error occurred during the loading process.', 'error');

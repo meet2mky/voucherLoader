@@ -28,6 +28,41 @@ export function displayMessage(message, type, duration = 5000) {
 }
 
 /**
+ * Calculates aggregate values for vouchers based on their status.
+ * @param {Array<Object>} vouchers The array of voucher objects.
+ * @returns {{availableValue: number, redeemedValue: number, failedValue: number}}
+ */
+export function calculateVoucherStats(vouchers) {
+  const stats = {
+    availableValue: 0,
+    redeemedValue: 0,
+    failedValue: 0,
+  };
+
+  if (!vouchers) {
+    return stats;
+  }
+
+  vouchers.forEach(voucher => {
+    const value = parseFloat(voucher.VoucherValue) || 0;
+    const status = voucher.status || 'AVAILABLE';
+
+    switch (status) {
+      case 'AVAILABLE':
+        stats.availableValue += value;
+        break;
+      case 'REDEEMED':
+        stats.redeemedValue += value;
+        break;
+      case 'ERROR':
+        stats.failedValue += value;
+        break;
+    }
+  });
+  return stats;
+}
+
+/**
  * Creates the HTML table for displaying vouchers.
  * @param {Array<Object>} vouchers The array of voucher objects.
  * @returns {string} The HTML string for the table.
@@ -70,18 +105,27 @@ export function showVoucherView(category, vouchers) {
 
   const categoryName = category.charAt(0).toUpperCase() + category.slice(1);
 
-  let viewHTML = `
+  const stats = calculateVoucherStats(vouchers);
+
+  const headerHTML = `
     <div class="voucher-view-header">
       <h3>${categoryName} Vouchers</h3>
       <button class="action-btn back-btn">Back</button>
     </div>
   `;
 
-  viewHTML += (vouchers && vouchers.length > 0)
+  const contentHTML = (vouchers && vouchers.length > 0)
     ? createVoucherTable(vouchers)
     : '<p id="no-vouchers-message">No vouchers found for this category.</p>';
 
-  voucherView.innerHTML = viewHTML;
+  const statsHTML = `
+    <div class="voucher-stats-summary">
+      <p>Available: <span>₹${stats.availableValue.toFixed(2)}</span></p>
+      <p>Redeemed: <span>₹${stats.redeemedValue.toFixed(2)}</span></p>
+      <p>Failed: <span>₹${stats.failedValue.toFixed(2)}</span></p>
+    </div>
+  `;
+  voucherView.innerHTML = headerHTML + contentHTML + statsHTML;
 }
 
 /**

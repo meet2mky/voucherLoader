@@ -52,7 +52,7 @@ export async function importFromGmail(category) {
         ui.displayMessage(`Scraping failed: ${error}`, 'error');
       } else if (vouchers && vouchers.length > 0) {
         console.log('Scraped vouchers:', vouchers);
-        storage.addVouchers(category, vouchers);
+        await storage.addVouchers(category, vouchers);
       } else {
         ui.displayMessage('No vouchers were found in the email.', 'error');
       }
