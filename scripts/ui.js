@@ -37,7 +37,6 @@ function createVoucherTable(vouchers) {
       <th>Code</th>
       <th>Pin</th>
       <th>Value</th>
-      <th>Expiry</th>
       <th>Status</th>
     </tr></thead><tbody>`;
 
@@ -48,7 +47,6 @@ function createVoucherTable(vouchers) {
       <td>${voucher.VoucherCode || 'N/A'}</td>
       <td>${voucher.VoucherPin || 'N/A'}</td>
       <td>${voucher.VoucherValue || 'N/A'}</td>
-      <td>${voucher.ExpiryDate || 'N/A'}</td>
       <td class="${statusClass}">${status}</td>
     </tr>`;
   });
