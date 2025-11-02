@@ -9,6 +9,8 @@ import { myntraLoadLogic } from './load/myntra-load.js';
 import { amazonLoadLogic } from './load/amazon-load.js';
 import { myntraScrapeLogic } from './scrape/myntra-scrape.js';
 import { amazonScrapeLogic } from './scrape/amazon-scrape.js';
+import { myntraBalanceLogic } from './balance/myntra-balance.js';
+import { amazonBalanceLogic } from './balance/amazon-balance.js';
 
 export const brandConfig = {
   myntra: {
@@ -16,12 +18,14 @@ export const brandConfig = {
     loadUrl: 'https://www.myntra.com/my/myntracredit',
     loadLogic: myntraLoadLogic,
     scrapeLogic: myntraScrapeLogic,
+    balanceLogic: myntraBalanceLogic,
   },
   amazon: {
     url: 'https://www.amazon.in/',
     loadUrl: 'https://www.amazon.in/gp/aw/ya/gcb',
     loadLogic: amazonLoadLogic,
     scrapeLogic: amazonScrapeLogic,
+    balanceLogic: amazonBalanceLogic,
   },
 };
 

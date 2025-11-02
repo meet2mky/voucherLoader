@@ -63,6 +63,45 @@ export function calculateVoucherStats(vouchers) {
 }
 
 /**
+ * Displays the current account balance for a given category inside its action container.
+ * @param {string} category The brand category (e.g., 'myntra').
+ * @param {number} balance The account balance.
+ */
+export function displayCurrentBalance(category, balance) {
+  const container = document.querySelector(`.action-container[data-category="${category}"]`);
+  if (!container) {
+    console.error(`UI Error: Could not find action container for category "${category}" to display balance.`);
+    return;
+  }
+
+  let balanceEl = container.querySelector('.current-balance-display');
+
+  // If the element doesn't exist, create it.
+  if (!balanceEl) {
+    balanceEl = document.createElement('div');
+    // Use voucher-stats-summary for consistent styling, and current-balance-display for selection.
+    balanceEl.className = 'current-balance-display voucher-stats-summary';
+    container.append(balanceEl);
+  }
+
+  // Update the content to match the stats summary format.
+  balanceEl.innerHTML = `
+    <p>Current Balance: <span>₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+  `;
+}
+
+/**
+ * Removes the current balance display.
+ * @param {string} [category] Optional. If provided, only removes from that category's container. If not, removes all.
+ */
+export function removeCurrentBalance(category) {
+  const selector = category
+    ? `.action-container[data-category="${category}"] .current-balance-display`
+    : '.current-balance-display';
+  document.querySelectorAll(selector).forEach(el => el.remove());
+}
+
+/**
  * Creates the HTML table for displaying vouchers.
  * @param {Array<Object>} vouchers The array of voucher objects.
  * @returns {string} The HTML string for the table.
@@ -120,9 +159,9 @@ export function showVoucherView(category, vouchers) {
 
   const statsHTML = `
     <div class="voucher-stats-summary">
-      <p>Available: <span>₹${stats.availableValue.toFixed(2)}</span></p>
-      <p>Redeemed: <span>₹${stats.redeemedValue.toFixed(2)}</span></p>
-      <p>Failed: <span>₹${stats.failedValue.toFixed(2)}</span></p>
+      <p>Available: <span>₹${stats.availableValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+      <p>Redeemed: <span>₹${stats.redeemedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+      <p>Failed: <span>₹${stats.failedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
     </div>
   `;
   voucherView.innerHTML = headerHTML + contentHTML + statsHTML;

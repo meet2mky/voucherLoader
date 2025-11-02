@@ -52,6 +52,7 @@ export async function loadVouchersForBrand(brand, button, onProgress) {
 
     ui.displayMessage(`Starting to load ${vouchersToLoad.length} available vouchers for ${brand}...`, 'info');
     const loadLogic = brandConfig[brand].loadLogic;
+    const balanceLogic = brandConfig[brand].balanceLogic;
     if (!loadLogic) {
       ui.displayMessage(`No loading logic defined for ${brand}.`, 'error');
       return; // finally will re-enable the button
@@ -67,22 +68,66 @@ export async function loadVouchersForBrand(brand, button, onProgress) {
       i++;
       button.textContent = `Loading... (${i}/${vouchersToLoad.length})`;
       try {
+        let balanceBefore = null;
+        if (balanceLogic) {
+          const [balanceResult] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: balanceLogic,
+          });
+          if (balanceResult && balanceResult.result !== -1) {
+            balanceBefore = balanceResult.result;
+          } else {
+            ui.displayMessage(`Could not get balance for ${brand} before applying voucher. Verification will be skipped.`, 'info');
+          }
+        }
+
         const [injectionResult] = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: loadLogic,
           args: [voucher.VoucherCode, voucher.VoucherPin],
         });
 
-        const result = injectionResult.result;
-        if (result && result.success) {
-          successfulLoads++;
-          voucher.status = 'REDEEMED';
+        const submissionResult = injectionResult.result;
+        if (submissionResult && submissionResult.success) {
+          // Submission was successful, now verify with balance if possible.
+          if (balanceLogic && balanceBefore !== null) {
+            // Wait for balance to update on the page.
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            const [balanceResult] = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: balanceLogic,
+            });
+
+            if (balanceResult && balanceResult.result !== -1) {
+              const balanceAfter = balanceResult.result;
+              const voucherValue = parseFloat(voucher.VoucherValue);
+              const balanceDiff = balanceAfter - balanceBefore;
+
+              if (Math.abs(balanceDiff - voucherValue) < 0.01) {
+                successfulLoads++;
+                voucher.status = 'REDEEMED';
+              } else {
+                failedLoads++;
+                voucher.status = 'ERROR';
+                ui.displayMessage(`Voucher ${voucher.VoucherCode} applied, but balance check failed. Expected: ${voucherValue.toFixed(2)}, Found: ${balanceDiff.toFixed(2)}`, 'error', 8000);
+              }
+            } else {
+              // Could not get balance after. Trust submission but warn user.
+              successfulLoads++;
+              voucher.status = 'REDEEMED';
+              ui.displayMessage(`Voucher ${voucher.VoucherCode} submitted, but could not verify balance change. Please check manually.`, 'info', 8000);
+            }
+          } else {
+            successfulLoads++;
+            voucher.status = 'REDEEMED';
+          }
         } else {
           failedLoads++;
           voucher.status = 'ERROR';
-          const errorMessage = result ? result.message : 'An unknown error occurred.';
+          const errorMessage = submissionResult ? submissionResult.message : 'An unknown error occurred.';
           ui.displayMessage(`Failed on voucher ${voucher.VoucherCode}: ${errorMessage}`, 'error', 6000);
-          console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, result);
+          console.error(`Voucher loading failed for ${voucher.VoucherCode}:`, submissionResult);
         }
 
         // Save progress to storage immediately after processing each voucher.
@@ -94,7 +139,7 @@ export async function loadVouchersForBrand(brand, button, onProgress) {
 
         // Wait for a period with jitter to mimic more human-like behavior and
         // allow the website to process the submission before the next one.
-        const waitTime = 2000 + Math.random() * 2000; // 2-4 seconds
+        const waitTime = 5000 + Math.random() * 2000; // 5-7 seconds
         await new Promise(resolve => setTimeout(resolve, waitTime));
 
       } catch (error) {

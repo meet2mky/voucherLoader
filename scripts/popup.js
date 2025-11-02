@@ -29,17 +29,57 @@ document.addEventListener('DOMContentLoaded', function() {
     const container = document.querySelector(`.action-container[data-category="${category}"]`);
     if (!container) return;
 
-    const statsEl = container.querySelector('.voucher-stats-summary');
+    const statsEl = container.querySelector('.voucher-stats-details'); // Target the specific stats container
     if (!statsEl) return; // If stats aren't visible, do nothing.
 
     const vouchers = await storage.getVouchers(category);
     const stats = ui.calculateVoucherStats(vouchers);
 
     statsEl.innerHTML = `
-      <p>Available: <span>₹${stats.availableValue.toFixed(2)}</span></p>
-      <p>Redeemed: <span>₹${stats.redeemedValue.toFixed(2)}</span></p>
-      <p>Failed: <span>₹${stats.failedValue.toFixed(2)}</span></p>
+      <p>Available: <span>₹${stats.availableValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+      <p>Redeemed: <span>₹${stats.redeemedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+      <p>Failed: <span>₹${stats.failedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
     `;
+  }
+
+  /**
+   * Checks the current tab's URL and shows or hides the balance display accordingly.
+   * This function is the single source of truth for balance visibility.
+   */
+  async function updateBalanceVisibility() {
+    if (!activeCategory) {
+      ui.removeCurrentBalance(); // Remove all balance displays if no category is active
+      return;
+    }
+
+    const tab = await tabManager.getActiveTab();
+    const brand = brandConfig[activeCategory];
+
+    if (tab && tab.url && tab.url.startsWith(brand.loadUrl)) {
+      // We are on the correct page, try to fetch and display the balance.
+      const balanceLogic = brand.balanceLogic;
+      if (balanceLogic) {
+        try {
+          const [balanceResult] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: balanceLogic,
+          });
+
+          if (balanceResult && balanceResult.result !== -1) {
+            ui.displayCurrentBalance(activeCategory, balanceResult.result);
+          } else {
+            // If fetching fails (e.g., element not found), hide the display.
+            ui.removeCurrentBalance(activeCategory);
+          }
+        } catch (e) {
+          console.error(`Error fetching balance for ${activeCategory}:`, e);
+          ui.removeCurrentBalance(activeCategory); // Hide on error
+        }
+      }
+    } else {
+      // We are not on the correct page, ensure the balance display is hidden.
+      ui.removeCurrentBalance(activeCategory);
+    }
   }
 
   // Add event listeners for the new "Load Vouchers" buttons
@@ -47,9 +87,14 @@ document.addEventListener('DOMContentLoaded', function() {
     button.addEventListener('click', async () => {
       const actionContainer = button.closest('.action-container');
       const brand = actionContainer.dataset.category;
-      // Pass a callback to update stats during the loading process.
-      await voucherLoader.loadVouchersForBrand(brand, button, () => updateStatsDisplay(brand));
-      await updateStatsDisplay(brand); // Update stats after the process completes
+      // Define a progress callback to update both stats and balance.
+      const onProgress = async () => {
+        await updateStatsDisplay(brand);
+        await updateBalanceVisibility();
+      };
+      await voucherLoader.loadVouchersForBrand(brand, button, onProgress);
+      // Final update after the process completes.
+      await onProgress();
     });
   });
 
@@ -69,6 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
       actionContainers.forEach(container => (container.style.display = 'none'));
       // Show all category items
       categoryItems.forEach(item => (item.style.display = 'flex'));
+      await updateBalanceVisibility(); // This will clear any leftover balance display
       return;
     }
 
@@ -82,6 +128,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     selectedCategoryItem.classList.add('selected');
 
+    // The logic to show/hide balance is now centralized in updateBalanceVisibility
+    await updateBalanceVisibility();
+
     // Fetch vouchers and calculate stats to display in the main view
     const vouchers = await storage.getVouchers(activeCategory);
     const stats = ui.calculateVoucherStats(vouchers);
@@ -90,12 +139,12 @@ document.addEventListener('DOMContentLoaded', function() {
       if (container.dataset.category === selectedCategory) {
         container.style.display = 'block';
         // Create and inject stats element
-        const statsEl = document.createElement('div');
-        statsEl.className = 'voucher-stats-summary';
+        const statsEl = document.createElement('div'); // Add a more specific class for targeting
+        statsEl.className = 'voucher-stats-summary voucher-stats-details';
         statsEl.innerHTML = `
-          <p>Available: <span>₹${stats.availableValue.toFixed(2)}</span></p>
-          <p>Redeemed: <span>₹${stats.redeemedValue.toFixed(2)}</span></p>
-          <p>Failed: <span>₹${stats.failedValue.toFixed(2)}</span></p>
+          <p>Available: <span>₹${stats.availableValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+          <p>Redeemed: <span>₹${stats.redeemedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+          <p>Failed: <span>₹${stats.failedValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
         `;
         // Append to the action container so it appears at the bottom
         container.append(statsEl);
@@ -139,5 +188,22 @@ document.addEventListener('DOMContentLoaded', function() {
     if (target.matches('.back-btn')) {
       ui.showMainView();
     }
+  });
+
+  // Add listeners to keep the balance display in sync with the tab state.
+  chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
+    // We only care about URL changes.
+    if (changeInfo.url) {
+      const activeTab = await tabManager.getActiveTab();
+      // Only update if the changed tab is the one that's currently active.
+      if (activeTab && tabId === activeTab.id) {
+        await updateBalanceVisibility();
+      }
+    }
+  });
+
+  chrome.tabs.onActivated.addListener(async () => {
+    // A new tab has become active, so we need to re-check.
+    await updateBalanceVisibility();
   });
 });
